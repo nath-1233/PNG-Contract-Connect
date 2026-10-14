@@ -8,11 +8,33 @@ type Application = {
   tenderId: string;
 };
 
+type UploadedDocument = {
+  key: string;
+  name: string;
+  contentType: string;
+  size: number;
+  signature: string;
+};
+
+type UploadResponse = {
+  uploadUrl: string;
+  fields: Record<string, string>;
+  key: string;
+  name: string;
+  contentType: string;
+};
+
+function getFileSignature(file: File) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
 export default function ApplyForm({ tenderId }: { tenderId: string }) {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
   const [hasApplied, setHasApplied] = useState(false);
   const [proposal, setProposal] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -51,10 +73,54 @@ export default function ApplyForm({ tenderId }: { tenderId: string }) {
     setError('');
 
     try {
+      const documents = [...uploadedDocuments];
+      const pendingFiles = selectedFiles.filter((file) =>
+        !documents.some((document) => document.signature === getFileSignature(file)),
+      );
+      if (documents.length + pendingFiles.length > 5) {
+        throw new Error('Attach no more than 5 bid documents.');
+      }
+      for (const file of selectedFiles) {
+        const signature = getFileSignature(file);
+        if (documents.some((document) => document.signature === signature)) continue;
+
+        const uploadResponse = await fetch('/api/bid-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenderId,
+            name: file.name,
+            contentType: file.type,
+            size: file.size,
+          }),
+        });
+        const uploadData = await uploadResponse.json();
+        if (!uploadResponse.ok) throw new Error(uploadData.error || 'Unable to prepare secure document upload.');
+
+        const upload = uploadData as UploadResponse;
+        const formData = new FormData();
+        Object.entries(upload.fields).forEach(([key, value]) => formData.append(key, value));
+        formData.append('file', file);
+        const storageResponse = await fetch(upload.uploadUrl, { method: 'POST', body: formData });
+        if (!storageResponse.ok) throw new Error('A document could not be uploaded. Check the file and try again.');
+
+        documents.push({
+          key: upload.key,
+          name: upload.name,
+          contentType: upload.contentType,
+          size: file.size,
+          signature,
+        });
+        setUploadedDocuments([...documents]);
+      }
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenderId, proposal }),
+        body: JSON.stringify({
+          tenderId,
+          proposal,
+          documents: documents.map(({ key, name, contentType, size }) => ({ key, name, contentType, size })),
+        }),
       });
       const data = await response.json();
 
@@ -65,6 +131,8 @@ export default function ApplyForm({ tenderId }: { tenderId: string }) {
       if (!response.ok) throw new Error(data.error || 'Unable to submit your application.');
       setSubmitted(true);
       setHasApplied(true);
+      setSelectedFiles([]);
+      setUploadedDocuments([]);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to submit your application.');
     } finally {
@@ -92,6 +160,42 @@ export default function ApplyForm({ tenderId }: { tenderId: string }) {
             placeholder="Describe your proposed approach and relevant experience (at least 20 characters)."
             className="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-sky-200 focus:border-white"
           />
+          <label htmlFor="bid-documents" className="block text-sm font-medium text-sky-100">
+            Supporting documents <span className="font-normal text-sky-200">(PDF, DOCX, XLSX, JPG or PNG; max 10 MB each, up to 5)</span>
+          </label>
+          <input
+            id="bid-documents"
+            type="file"
+            multiple
+            accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png"
+            onChange={(event) => {
+              const files = Array.from(event.target.files || []);
+              setSelectedFiles(files);
+              setError(files.length > 5 ? 'Attach no more than 5 bid documents.' : '');
+            }}
+            className="w-full text-sm text-sky-100 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-[#0d3b66]"
+          />
+          {uploadedDocuments.length ? (
+            <div className="space-y-1 text-xs text-sky-100" role="status">
+              <p>{uploadedDocuments.length} document{uploadedDocuments.length === 1 ? '' : 's'} uploaded to encrypted storage; malware scanning is required before submission.</p>
+              {uploadedDocuments.map((document) => (
+                <div key={document.signature} className="flex items-center justify-between gap-2">
+                  <span className="truncate">{document.name}</span>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => {
+                      setUploadedDocuments((current) => current.filter((item) => item.signature !== document.signature));
+                      setSelectedFiles((current) => current.filter((file) => getFileSignature(file) !== document.signature));
+                    }}
+                    className="shrink-0 font-semibold underline disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <button disabled={submitting} type="submit" className="w-full rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#0d3b66] hover:bg-slate-100 disabled:opacity-60">
             {submitting ? 'Submitting...' : 'Submit application'}
           </button>

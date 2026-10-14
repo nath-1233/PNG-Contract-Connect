@@ -17,7 +17,7 @@ const stats = [
   { label: "Provinces covered", value: "22" },
   { label: "Tender categories", value: "16" },
   { label: "Average response time", value: "24 hrs" },
-  { label: "Secure submissions", value: "99.9%" },
+  { label: "Procurement modules", value: "6" },
 ];
 
 const categories = [
@@ -44,7 +44,7 @@ const steps = [
     number: "01",
     title: "Create secure account",
     description:
-      "Register as a contractor, department, evaluator, or administrator using verified identity checks and role-based access.",
+      "Register as a contractor or government user with role-based portal access. External business and identity verification is not connected yet.",
   },
   {
     number: "02",
@@ -66,27 +66,27 @@ const featureGroups = [
     items: [
       "Register business and individual profiles",
       "Use search, filters, and saved tenders",
-      "Submit applications with secure document upload",
-      "Track award and contract milestones",
+      "Submit bid summaries; attach documents after encrypted storage is configured",
+      "Track bid decisions and contract milestones",
     ],
   },
   {
     title: "For Government",
     items: [
       "Publish tenders and manage documents",
-      "Assign evaluators and track scoring",
-      "Maintain compliance and audit trails",
-      "Issue awards and manage contract performance",
+      "Score bids against published evaluation criteria",
+      "Record conflict declarations and a file-backed activity trail",
+      "Track milestones and invoice status",
     ],
   },
 ];
 
 const securityFeatures = [
-  "HTTPS/TLS protection and encrypted storage",
-  "Role-based access control and MFA for privileged users",
-  "Server-side validation and OWASP-aligned safeguards",
-  "Private object storage for sensitive documents",
-  "Audit logging and secure operational reporting",
+  "Server-side role checks protect government evaluation and contractor records",
+  "Passwords are hashed before storage",
+  "Eligibility is shown for review; business identity is not externally verified",
+  "  Bid-document uploads require deployment configuration for private AWS S3, KMS encryption, and GuardDuty malware scanning",
+  "The workspace activity hash chain is illustrative and is not immutable storage",
 ];
 
 async function LiveTenderSnapshot() {
@@ -341,10 +341,25 @@ export default function Home() {
         </section>
 
         <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm sm:p-10">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#d62828]">Procurement operations · MVP</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-slate-900">From published contract to delivery and payment tracking</h2>
+            <p className="mt-4 max-w-3xl leading-7 text-slate-600">
+              Explore the role-based procurement workbench for bid evaluation, milestones, invoice status,
+              conflict declarations and an activity trail. AWS document uploads require deployment
+              configuration; external identity, banking and automated risk integrations are not connected.
+            </p>
+            <Link href="/procurement-workspace" className="mt-6 inline-flex rounded-full bg-[#0d3b66] px-6 py-3 text-sm font-semibold text-white hover:bg-[#123d72]">
+              Open procurement workspace
+            </Link>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-3xl bg-[#0d3b66] p-8 text-white shadow-lg">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-200">Security and compliance</p>
-              <h2 className="mt-3 text-3xl font-bold">Protecting sensitive bids and decision-making</h2>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-200">Current MVP safeguards</p>
+              <h2 className="mt-3 text-3xl font-bold">What the portal protects—and what is not connected yet</h2>
               <ul className="mt-6 space-y-4">
                 {securityFeatures.map((feature) => (
                   <li key={feature} className="flex items-start gap-3 text-slate-100">

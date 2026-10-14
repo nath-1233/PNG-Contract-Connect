@@ -34,6 +34,7 @@ type ApplicationSummary = {
   proposal: string;
   status: string;
   submittedAt: string;
+  documents?: { name: string; index: number }[];
 };
 
 const emptyForm = {
@@ -162,6 +163,9 @@ export default function GovernmentDashboardPage() {
             <Link href="/tenders" className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-[#0d3b66]">
               View public portal
             </Link>
+            <Link href="/procurement-workspace" className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-[#0d3b66] hover:border-[#0d3b66]">
+              Evaluation and monitoring
+            </Link>
             <button
               type="button"
               onClick={() => setShowForm((current) => !current)}
@@ -267,6 +271,17 @@ export default function GovernmentDashboardPage() {
                     <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{application.status}</span>
                   </div>
                   {application.proposal ? <p className="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-700">{application.proposal}</p> : null}
+                  {application.documents?.length ? (
+                    <ul className="mt-3 border-t border-slate-200 pt-3">
+                      {application.documents.map((document) => (
+                        <li key={document.index}>
+                          <a href={`/api/applications/${application.id}/documents/${document.index}`} className="text-sm font-semibold text-[#0d3b66] hover:underline">
+                            Download {document.name}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </article>
               )) : <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">No applications have been submitted for your contracts yet.</p>}
             </div>

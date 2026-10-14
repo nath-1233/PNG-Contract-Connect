@@ -18,6 +18,7 @@ type ApplicationSummary = {
   tenderTitle: string;
   status: string;
   submittedAt: string;
+  documents?: { name: string; index: number }[];
 };
 
 type TenderSummary = {
@@ -90,9 +91,14 @@ export default function ContractorDashboardPage() {
             <h1 className="mt-2 text-3xl font-black text-slate-900">Welcome back, {user?.fullName || 'Contractor'}</h1>
             <p className="mt-2 text-slate-600">{user?.organization} · Find contracts and track your bids.</p>
           </div>
-          <Link href="/tenders" className="rounded-full bg-[#0d3b66] px-5 py-3 text-center text-sm font-semibold text-white hover:bg-[#123d72]">
-            Browse all contracts
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/procurement-workspace" className="rounded-full border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-[#0d3b66] hover:border-[#0d3b66]">
+              Contract workspace
+            </Link>
+            <Link href="/tenders" className="rounded-full bg-[#0d3b66] px-5 py-3 text-center text-sm font-semibold text-white hover:bg-[#123d72]">
+              Browse all contracts
+            </Link>
+          </div>
         </header>
 
         {error ? <p role="alert" className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -124,6 +130,17 @@ export default function ContractorDashboardPage() {
                     <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{application.status}</span>
                   </div>
                   <Link href={`/tenders/${application.tenderId}`} className="mt-3 inline-flex text-sm font-semibold text-[#0d3b66] hover:underline">View contract</Link>
+                  {application.documents?.length ? (
+                    <ul className="mt-3 border-t border-slate-200 pt-3">
+                      {application.documents.map((document) => (
+                        <li key={document.index}>
+                          <a href={`/api/applications/${application.id}/documents/${document.index}`} className="text-sm font-semibold text-[#0d3b66] hover:underline">
+                            Download {document.name}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </article>
               )) : <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">You have not submitted any applications yet.</p>}
             </div>
