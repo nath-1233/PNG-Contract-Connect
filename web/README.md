@@ -18,7 +18,9 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Contract assistant configuration
 
-The text-only assistant can use Google Gemini or Anthropic Claude through the portal's same-origin route handler. Set `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or both in the portal server environment; API keys must never be exposed to browser code or prefixed with `NEXT_PUBLIC_`. The provider selector remains available when a key is missing and explains which server setting is required. Run the route tests with `npm test`.
+The text-only assistant can use Google Gemini or Anthropic Claude through the portal's same-origin route handler. For local testing, sign in as a government or administrator user and open **Government dashboard → API settings** to save a key on the server. The key is stored in `web/.local-secrets/contract-assistant.json`, which is excluded from git. Alternatively, set `GEMINI_API_KEY` and/or `ANTHROPIC_API_KEY` in `web/.env.local`; Next.js loads those server-side values locally, and they take priority over keys saved through the settings page. `.env.local` is ignored by git. API keys are never exposed to browser code or prefixed with `NEXT_PUBLIC_`.
+
+The local file is intended only for a single local development server. For deployment, set `GEMINI_API_KEY` and/or `ANTHROPIC_API_KEY` in the hosting provider's secret manager; environment variables take priority over keys saved through the settings page. Do not commit or share provider keys. Run the route tests with `npm test`.
 
 The default models are `gemini-3.8-flash` and `claude-sonnet-5-5`. Optionally set the server-only `GEMINI_MODEL` or `ANTHROPIC_MODEL` environment variables to override them. The portal calls Google's Gemini Interactions API and Anthropic's Messages API directly at their fixed official endpoints; no provider URL is configurable by the browser.
 

@@ -61,12 +61,11 @@ export default function ContractAssistant() {
   const selectedConfigured = provider === "gemini"
     ? status?.geminiConfigured
     : status?.claudeConfigured;
-  const missingKey = provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
   const providerName = provider === "gemini" ? "Gemini" : "Claude";
   const configurationMessage = statusUnavailable
     ? "Assistant configuration could not be checked. Try again later."
     : status && !selectedConfigured
-      ? `${providerName} is not configured. Set ${missingKey} on the portal server to enable ${providerName} chat.`
+      ? `${providerName} is not configured. A government administrator can add an API key in Government dashboard → API settings.`
       : "";
 
   async function handleChat(event: FormEvent<HTMLFormElement>) {

@@ -1,3 +1,5 @@
+import { getAssistantApiKey, getAssistantKeyStatus } from "@/lib/contract-assistant-config";
+
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const claudeModel = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 const maximumBodyLength = 96_000;
@@ -54,19 +56,24 @@ function validateMessages(value: unknown): ChatMessage[] | null {
   return messages.at(-1)?.role === "user" ? messages : null;
 }
 
-async function getProviderError(response: Response, provider: Provider) {
+async function getProviderError(response: Response, provider: Provider, apiKey: string) {
+  const providerName = provider === "gemini" ? "Gemini" : "Claude";
+  if (response.status === 401 || response.status === 403) {
+    return `${providerName} API key authentication failed. Check that the key is active and has access to the selected model.`;
+  }
+
   let responseBody: unknown;
   try {
     responseBody = await response.json();
   } catch {
-    return `${provider === "gemini" ? "Gemini" : "Claude"} returned HTTP ${response.status}.`;
+    return `${providerName} returned HTTP ${response.status}.`;
   }
 
   if (isRecord(responseBody) && isRecord(responseBody.error) && typeof responseBody.error.message === "string") {
-    return responseBody.error.message.slice(0, 1_000);
+    return responseBody.error.message.replaceAll(apiKey, "[redacted]").slice(0, 1_000);
   }
 
-  return `${provider === "gemini" ? "Gemini" : "Claude"} returned HTTP ${response.status}.`;
+  return `${providerName} returned HTTP ${response.status}.`;
 }
 
 function getGeminiResponseText(value: unknown): string | null {
@@ -104,14 +111,19 @@ function getGeminiResponseText(value: unknown): string | null {
 }
 
 export async function GET() {
-  return Response.json(
-    {
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
-      claudeConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
-      models: { gemini: geminiModel, claude: claudeModel },
-    },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  try {
+    const status = await getAssistantKeyStatus();
+    return Response.json(
+      {
+        geminiConfigured: status.geminiConfigured,
+        claudeConfigured: status.claudeConfigured,
+        models: { gemini: geminiModel, claude: claudeModel },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch {
+    return Response.json({ error: "Unable to read assistant configuration." }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -147,11 +159,15 @@ export async function POST(request: Request) {
   }
 
   const provider: Provider = body.provider;
-  const apiKey = provider === "gemini" ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  let apiKey: string;
+  try {
+    apiKey = await getAssistantApiKey(provider);
+  } catch {
+    return Response.json({ error: "Unable to read assistant credentials on this server." }, { status: 500 });
+  }
   if (!apiKey) {
-    const requiredKey = provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
     return Response.json(
-      { error: `${provider === "gemini" ? "Gemini" : "Claude"} is not configured. Set ${requiredKey} on the portal server.` },
+      { error: `${provider === "gemini" ? "Gemini" : "Claude"} is not configured. Add its API key in Government dashboard → API settings or set it on the portal server.` },
       { status: 503 },
     );
   }
@@ -200,7 +216,7 @@ export async function POST(request: Request) {
 
   if (!upstream.ok) {
     return Response.json(
-      { error: await getProviderError(upstream, provider) },
+      { error: await getProviderError(upstream, provider, apiKey) },
       { status: upstream.status },
     );
   }
