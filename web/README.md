@@ -18,9 +18,9 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Contract assistant configuration
 
-The contract assistant uses the separately deployed ChatbotContractAnalyzer API through the portal's same-origin route handlers. Set `CONTRACT_ASSISTANT_API_URL` in the portal server environment to the analyzer service base URL. Do not prefix it with `NEXT_PUBLIC_` or expose it in browser code. If it is unset, the assistant displays a setup message and its API proxy returns HTTP 503.
+The text-only assistant can use Google Gemini or Anthropic Claude through the portal's same-origin route handler. Set `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or both in the portal server environment; API keys must never be exposed to browser code or prefixed with `NEXT_PUBLIC_`. The provider selector remains available when a key is missing and explains which server setting is required. Run the route tests with `npm test`.
 
-The assistant sends PDF uploads to `/upload`, questions to `/chat`, and session clears to `/reset`. Each request includes a browser-session UUID in the `X-Session-ID` header so uploaded documents are isolated by browser session.
+The default models are `gemini-3.8-flash` and `claude-sonnet-5-5`. Optionally set the server-only `GEMINI_MODEL` or `ANTHROPIC_MODEL` environment variables to override them. The portal calls Google's Gemini Interactions API and Anthropic's Messages API directly at their fixed official endpoints; no provider URL is configurable by the browser.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
