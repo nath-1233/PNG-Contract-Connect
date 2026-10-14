@@ -1,7 +1,7 @@
 import { getAssistantKeyStatus, getGeminiApiKey } from "@/lib/contract-assistant-config";
 
-const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-const geminiFallbackModel = "gemini-3.1-flash-lite";
+const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const geminiFallbackModel = "gemini-3.8-flash";
 const maximumBodyLength = 96_000;
 const maximumMessages = 20;
 const maximumMessageLength = 6_000;
@@ -74,9 +74,21 @@ async function getGeminiErrorMessage(response: Response, apiKey: string) {
 }
 
 function isTransientGeminiError(response: Response, message: string) {
-  return response.status === 429 ||
-    response.status === 503 ||
-    /high demand|overloaded|capacity|temporar(?:y|ily)|rate.?limit|resource.?exhausted|unavailable/i.test(message);
+  return (response.status === 429 || response.status === 503) &&
+    !isGeminiQuotaError(message) &&
+    /high demand|overloaded|capacity|temporarily unavailable|rate.?limit|resource.?exhausted|too many requests/i.test(message);
+}
+
+function isGeminiQuotaError(message: string) {
+  return /quota|billing|daily limit|insufficient (?:credit|fund)/i.test(message);
+}
+
+function getGeminiQuotaMessage() {
+  return "Gemini API quota is exhausted for this key. Check its quota and billing status in Google AI Studio, then try again.";
+}
+
+function getGeminiUnavailableModelMessage() {
+  return "The configured Gemini model is not available to this API key. Enable gemini-2.5-flash in Google AI Studio or set GEMINI_MODEL to a model available to this key.";
 }
 
 function getGeminiResponseText(value: unknown): string | null {
@@ -200,6 +212,12 @@ export async function POST(request: Request) {
 
   if (!upstream.ok) {
     const primaryError = await getGeminiErrorMessage(upstream, apiKey);
+    if (isGeminiQuotaError(primaryError)) {
+      return Response.json({ error: getGeminiQuotaMessage() }, { status: 429 });
+    }
+    if (upstream.status === 404 && /model.+(?:not available|no longer available|not enabled)/i.test(primaryError)) {
+      return Response.json({ error: getGeminiUnavailableModelMessage() }, { status: 503 });
+    }
     if (geminiModel !== geminiFallbackModel && isTransientGeminiError(upstream, primaryError)) {
       try {
         upstream = await requestGemini(geminiFallbackModel);
@@ -215,10 +233,23 @@ export async function POST(request: Request) {
   }
 
   if (!upstream.ok) {
-    return Response.json(
-      { error: await getGeminiErrorMessage(upstream, apiKey) },
-      { status: upstream.status },
-    );
+    const fallbackError = await getGeminiErrorMessage(upstream, apiKey);
+    if (isGeminiQuotaError(fallbackError)) {
+      return Response.json({ error: getGeminiQuotaMessage() }, { status: 429 });
+    }
+    if (/model.+(?:not available|no longer available|not enabled)/i.test(fallbackError)) {
+      return Response.json(
+        { error: "Gemini is temporarily unavailable, and the fallback model is not available to this API key. Enable an available Flash model in Google AI Studio or try again later." },
+        { status: 503 },
+      );
+    }
+    if (isTransientGeminiError(upstream, fallbackError)) {
+      return Response.json(
+        { error: "Gemini is temporarily at capacity after retrying with gemini-3.8-flash. Please wait a few minutes and try again." },
+        { status: upstream.status },
+      );
+    }
+    return Response.json({ error: fallbackError }, { status: upstream.status });
   }
 
   let upstreamData: unknown;

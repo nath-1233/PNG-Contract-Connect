@@ -84,7 +84,7 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.equal(response.status, 200);
       assert.deepEqual(await readJson(response), {
         geminiConfigured: false,
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
       });
     });
 
@@ -178,21 +178,21 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.equal(captured.url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
       assert.equal(captured.options.headers.get('x-goog-api-key'), 'test-gemini-key');
       const requestBody = JSON.parse(captured.options.body);
-      assert.equal(requestBody.model, 'gemini-3.8-flash');
+      assert.equal(requestBody.model, 'gemini-2.5-flash');
       assert.equal(requestBody.input, 'User: How do I apply for an open contract?');
       assert.equal(requestBody.store, false);
       assert.match(requestBody.system_instruction, /not legal advice/);
     });
 
-    await t.test('retries transient capacity failures with Gemini Flash fallback', async () => {
+    await t.test('retries a rate-limit response once with Gemini 3.8 Flash fallback', async () => {
       const models = [];
       globalThis.fetch = async (_url, options) => {
         const requestBody = JSON.parse(options.body);
         models.push(requestBody.model);
         if (models.length === 1) {
           return Response.json(
-            { error: { message: 'The model is currently experiencing high demand.' } },
-            { status: 503 },
+            { error: { message: 'Requests are being rate limited.' } },
+            { status: 429 },
           );
         }
         return Response.json({ output_text: 'Fallback model worked.' });
@@ -201,23 +201,77 @@ test('assistant status, validation, missing keys, and provider requests', async 
       const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 200);
       assert.deepEqual(await readJson(response), { response: 'Fallback model worked.' });
-      assert.deepEqual(models, ['gemini-3.8-flash', 'gemini-3.1-flash-lite']);
+      assert.deepEqual(models, ['gemini-2.5-flash', 'gemini-3.8-flash']);
     });
 
-    await t.test('does not retry non-transient failures and redacts keys', async () => {
+    await t.test('does not retry a non-capacity 503 and redacts keys', async () => {
       let calls = 0;
       globalThis.fetch = async () => {
         calls += 1;
         return Response.json(
-          { error: { message: 'Invalid model: test-gemini-key' } },
-          { status: 400 },
+          { error: { message: 'Internal server error: test-gemini-key' } },
+          { status: 503 },
         );
       };
 
       const redactedError = await routeModule.POST(makeChatRequest(messages));
-      assert.equal(redactedError.status, 400);
-      assert.deepEqual(await readJson(redactedError), { error: 'Invalid model: [redacted]' });
+      assert.equal(redactedError.status, 503);
+      assert.deepEqual(await readJson(redactedError), { error: 'Internal server error: [redacted]' });
       assert.equal(calls, 1);
+    });
+
+    await t.test('reports an unavailable primary model without retrying', async () => {
+      const models = [];
+      globalThis.fetch = async (_url, options) => {
+        models.push(JSON.parse(options.body).model);
+        return Response.json(
+          { error: { message: 'This model is no longer available to new users.' } },
+          { status: 404 },
+        );
+      };
+
+      const response = await routeModule.POST(makeChatRequest(messages));
+      assert.equal(response.status, 503);
+      assert.deepEqual(await readJson(response), {
+        error: "The configured Gemini model is not available to this API key. Enable gemini-2.5-flash in Google AI Studio or set GEMINI_MODEL to a model available to this key.",
+      });
+      assert.deepEqual(models, ['gemini-2.5-flash']);
+    });
+
+    await t.test('reports quota exhaustion without retrying', async () => {
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls += 1;
+        return Response.json(
+          { error: { message: 'You exceeded your current quota.' } },
+          { status: 429 },
+        );
+      };
+
+      const response = await routeModule.POST(makeChatRequest(messages));
+      assert.equal(response.status, 429);
+      assert.deepEqual(await readJson(response), {
+        error: "Gemini API quota is exhausted for this key. Check its quota and billing status in Google AI Studio, then try again.",
+      });
+      assert.equal(calls, 1);
+    });
+
+    await t.test('reports temporary overload after fallback is also at capacity', async () => {
+      const models = [];
+      globalThis.fetch = async (_url, options) => {
+        models.push(JSON.parse(options.body).model);
+        return Response.json(
+          { error: { message: 'The model is currently experiencing high demand.' } },
+          { status: 503 },
+        );
+      };
+
+      const response = await routeModule.POST(makeChatRequest(messages));
+      assert.equal(response.status, 503);
+      assert.deepEqual(await readJson(response), {
+        error: "Gemini is temporarily at capacity after retrying with gemini-3.8-flash. Please wait a few minutes and try again.",
+      });
+      assert.deepEqual(models, ['gemini-2.5-flash', 'gemini-3.8-flash']);
     });
 
     await t.test('rejects non-Gemini settings payloads', async () => {
