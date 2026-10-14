@@ -159,6 +159,9 @@ export default function GovernmentDashboardPage() {
             <p className="mt-2 text-slate-600">{user?.organization} · Publish opportunities and review contractor applications.</p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link href="/government-dashboard/api-settings" className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-[#0d3b66]">
+              API settings
+            </Link>
             <Link href="/tenders" className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-[#0d3b66]">
               View public portal
             </Link>

@@ -16,6 +16,14 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Contract assistant configuration
+
+The text-only assistant uses Google Gemini through the portal's same-origin route handler. For local testing, sign in as a government or administrator user and open **Government dashboard → API settings** to save a Gemini key on the server. The key is stored in `web/.local-secrets/contract-assistant.json`, which is excluded from git. Alternatively, set `GEMINI_API_KEY` in `web/.env.local`; Next.js loads it server-side locally, and it takes priority over the key saved through the settings page. `.env.local` is ignored by git. The API key is never exposed to browser code or prefixed with `NEXT_PUBLIC_`.
+
+The local file is intended only for a single local development server. For deployment, set `GEMINI_API_KEY` in the hosting provider's secret manager; the environment variable takes priority over the key saved through the settings page. Do not commit or share the key. Run the route tests with `npm test`.
+
+Before each chat request, the server uses Google's ListModels API with the server-only key to discover stable Gemini Flash models that support text generation. It prefers `GEMINI_MODEL` when that model is listed, then `gemini-2.5-flash`, and then other listed stable Flash models. If a listed model is rejected by the Interactions API or reports transient rate limiting/capacity pressure, it tries the next listed candidate; quota and unrelated errors are returned without model retries. ListModels and chat requests send the key in an authorization header, never in the URL. The portal calls Google's APIs at fixed official endpoints; no provider URL is configurable by the browser.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
