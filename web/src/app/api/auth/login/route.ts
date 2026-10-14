@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 
 import { createSessionToken } from '@/lib/auth';
-import { authenticateUser, getUserByEmail } from '@/lib/data-store';
+import { authenticateUser } from '@/lib/data-store';
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
