@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -38,8 +39,14 @@ export default function LoginPage() {
       <div className="mx-auto grid max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-lg lg:grid-cols-[1.1fr_0.9fr]">
         <section className="bg-[linear-gradient(135deg,#0d3b66,#123d72,#1a4f84)] p-8 text-white sm:p-12">
           <Link href="/" className="inline-flex items-center gap-3 text-lg font-bold">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d62828] text-sm text-white">
-              PNG
+            <span className="h-10 w-10 overflow-hidden rounded-xl bg-white">
+              <Image
+                src="/png-digital-bird-emblem.png"
+                alt="Papua New Guinea digital bird emblem"
+                width={40}
+                height={40}
+                className="h-full w-full object-contain"
+              />
             </span>
             PNG Contract Connect
           </Link>
