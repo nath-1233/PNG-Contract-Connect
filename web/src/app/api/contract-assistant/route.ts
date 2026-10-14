@@ -1,7 +1,7 @@
-import { getAssistantApiKey, getAssistantKeyStatus } from "@/lib/contract-assistant-config";
+import { getAssistantKeyStatus, getGeminiApiKey } from "@/lib/contract-assistant-config";
 
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-const claudeModel = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const geminiFallbackModel = "gemini-3.1-flash-lite";
 const maximumBodyLength = 96_000;
 const maximumMessages = 20;
 const maximumMessageLength = 6_000;
@@ -19,8 +19,6 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
-
-type Provider = "gemini" | "claude";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,24 +54,29 @@ function validateMessages(value: unknown): ChatMessage[] | null {
   return messages.at(-1)?.role === "user" ? messages : null;
 }
 
-async function getProviderError(response: Response, provider: Provider, apiKey: string) {
-  const providerName = provider === "gemini" ? "Gemini" : "Claude";
+async function getGeminiErrorMessage(response: Response, apiKey: string) {
   if (response.status === 401 || response.status === 403) {
-    return `${providerName} API key authentication failed. Check that the key is active and has access to the selected model.`;
+    return "Gemini API key authentication failed. Check that the key is active and has access to the selected model.";
   }
 
   let responseBody: unknown;
   try {
-    responseBody = await response.json();
+    responseBody = await response.clone().json();
   } catch {
-    return `${providerName} returned HTTP ${response.status}.`;
+    return `Gemini returned HTTP ${response.status}.`;
   }
 
   if (isRecord(responseBody) && isRecord(responseBody.error) && typeof responseBody.error.message === "string") {
     return responseBody.error.message.replaceAll(apiKey, "[redacted]").slice(0, 1_000);
   }
 
-  return `${providerName} returned HTTP ${response.status}.`;
+  return `Gemini returned HTTP ${response.status}.`;
+}
+
+function isTransientGeminiError(response: Response, message: string) {
+  return response.status === 429 ||
+    response.status === 503 ||
+    /high demand|overloaded|capacity|temporar(?:y|ily)|rate.?limit|resource.?exhausted|unavailable/i.test(message);
 }
 
 function getGeminiResponseText(value: unknown): string | null {
@@ -116,8 +119,7 @@ export async function GET() {
     return Response.json(
       {
         geminiConfigured: status.geminiConfigured,
-        claudeConfigured: status.claudeConfigured,
-        models: { gemini: geminiModel, claude: claudeModel },
+        model: geminiModel,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -143,11 +145,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Send a valid chat request." }, { status: 400 });
   }
 
-  if (
-    !isRecord(body) ||
-    (body.provider !== "gemini" && body.provider !== "claude")
-  ) {
-    return Response.json({ error: "Choose Gemini or Claude to continue." }, { status: 400 });
+  if (!isRecord(body) || Object.keys(body).some((key) => key !== "messages")) {
+    return Response.json({ error: "Send a valid chat request." }, { status: 400 });
   }
 
   const messages = validateMessages(body.messages);
@@ -158,65 +157,66 @@ export async function POST(request: Request) {
     );
   }
 
-  const provider: Provider = body.provider;
   let apiKey: string;
   try {
-    apiKey = await getAssistantApiKey(provider);
+    apiKey = await getGeminiApiKey();
   } catch {
     return Response.json({ error: "Unable to read assistant credentials on this server." }, { status: 500 });
   }
   if (!apiKey) {
     return Response.json(
-      { error: `${provider === "gemini" ? "Gemini" : "Claude"} is not configured. Add its API key in Government dashboard → API settings or set it on the portal server.` },
+      { error: "Gemini is not configured. Add its API key in Government dashboard → API settings or set it on the portal server." },
       { status: 503 },
     );
   }
 
-  const upstreamUrl = provider === "gemini"
-    ? "https://generativelanguage.googleapis.com/v1beta/interactions"
-    : "https://api.anthropic.com/v1/messages";
+  const upstreamUrl = "https://generativelanguage.googleapis.com/v1beta/interactions";
   const headers = new Headers({ "Content-Type": "application/json" });
-  let upstreamBody: Record<string, unknown>;
+  headers.set("x-goog-api-key", apiKey);
+  const upstreamBody = {
+    system_instruction: systemPrompt,
+    input: messages.map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`).join("\n\n"),
+    generation_config: { max_output_tokens: 1_200 },
+    store: false,
+  };
 
-  if (provider === "gemini") {
-    headers.set("x-goog-api-key", apiKey);
-    upstreamBody = {
-      model: geminiModel,
-      system_instruction: systemPrompt,
-      input: messages.map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`).join("\n\n"),
-      generation_config: { max_output_tokens: 1_200 },
-      store: false,
-    };
-  } else {
-    headers.set("x-api-key", apiKey);
-    headers.set("anthropic-version", "2023-06-01");
-    upstreamBody = {
-      model: claudeModel,
-      max_tokens: 1_200,
-      system: systemPrompt,
-      messages,
-    };
-  }
+  const requestGemini = async (model: string) => fetch(upstreamUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...upstreamBody, model }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(45_000),
+  });
 
   let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(upstreamBody),
-      cache: "no-store",
-      signal: AbortSignal.timeout(45_000),
-    });
+    upstream = await requestGemini(geminiModel);
   } catch {
     return Response.json(
-      { error: `Unable to reach ${provider === "gemini" ? "Gemini" : "Claude"}. Check the portal server connection and try again.` },
+      { error: "Unable to reach Gemini. Check the portal server connection and try again." },
       { status: 502 },
     );
   }
 
   if (!upstream.ok) {
+    const primaryError = await getGeminiErrorMessage(upstream, apiKey);
+    if (geminiModel !== geminiFallbackModel && isTransientGeminiError(upstream, primaryError)) {
+      try {
+        upstream = await requestGemini(geminiFallbackModel);
+      } catch {
+        return Response.json(
+          { error: "Unable to reach Gemini. Check the portal server connection and try again." },
+          { status: 502 },
+        );
+      }
+    } else {
+      return Response.json({ error: primaryError }, { status: upstream.status });
+    }
+  }
+
+  if (!upstream.ok) {
     return Response.json(
-      { error: await getProviderError(upstream, provider, apiKey) },
+      { error: await getGeminiErrorMessage(upstream, apiKey) },
       { status: upstream.status },
     );
   }
@@ -226,26 +226,17 @@ export async function POST(request: Request) {
     upstreamData = await upstream.json();
   } catch {
     return Response.json(
-      { error: `${provider === "gemini" ? "Gemini" : "Claude"} returned an invalid response.` },
+      { error: "Gemini returned an invalid response." },
       { status: 502 },
     );
   }
 
   let answer: string | null = null;
-  if (provider === "gemini") {
-    answer = getGeminiResponseText(upstreamData);
-  } else if (isRecord(upstreamData) && Array.isArray(upstreamData.content)) {
-    answer = upstreamData.content
-      .filter((block): block is { type: "text"; text: string } =>
-        isRecord(block) && block.type === "text" && typeof block.text === "string")
-      .map((block) => block.text)
-      .join("")
-      .trim() || null;
-  }
+  answer = getGeminiResponseText(upstreamData);
 
   if (!answer) {
     return Response.json(
-      { error: `${provider === "gemini" ? "Gemini" : "Claude"} did not return a text answer.` },
+      { error: "Gemini did not return a text answer." },
       { status: 502 },
     );
   }

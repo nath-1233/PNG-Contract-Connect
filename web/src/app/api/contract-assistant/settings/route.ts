@@ -1,8 +1,8 @@
 import { getCurrentUser } from "@/lib/auth";
 import {
   getAssistantKeyStatus,
-  getSavedAssistantApiKeys,
-  saveAssistantApiKeys,
+  getSavedGeminiApiKey,
+  saveGeminiApiKey,
 } from "@/lib/contract-assistant-config";
 
 const maximumApiKeyLength = 4_096;
@@ -69,29 +69,21 @@ export async function POST(request: Request) {
   }
 
   if (
+    Object.keys(body).some((key) => !["geminiApiKey", "clearGemini"].includes(key)) ||
     (body.geminiApiKey !== undefined && typeof body.geminiApiKey !== "string") ||
-    (body.claudeApiKey !== undefined && typeof body.claudeApiKey !== "string") ||
-    (body.clearGemini !== undefined && typeof body.clearGemini !== "boolean") ||
-    (body.clearClaude !== undefined && typeof body.clearClaude !== "boolean")
+    (body.clearGemini !== undefined && typeof body.clearGemini !== "boolean")
   ) {
     return Response.json({ error: "Send valid API key settings." }, { status: 400 });
   }
 
   try {
-    const currentKeys = await getSavedAssistantApiKeys();
+    const currentKey = await getSavedGeminiApiKey();
     const submittedGeminiKey = typeof body.geminiApiKey === "string" ? body.geminiApiKey.trim() : undefined;
-    const submittedClaudeKey = typeof body.claudeApiKey === "string" ? body.claudeApiKey.trim() : undefined;
-    if (
-      (submittedGeminiKey?.length ?? 0) > maximumApiKeyLength ||
-      (submittedClaudeKey?.length ?? 0) > maximumApiKeyLength
-    ) {
+    if ((submittedGeminiKey?.length ?? 0) > maximumApiKeyLength) {
       return Response.json({ error: "API keys must be 4,096 characters or fewer." }, { status: 400 });
     }
-    const nextKeys = {
-      geminiApiKey: body.clearGemini === true ? "" : submittedGeminiKey ?? currentKeys.geminiApiKey,
-      claudeApiKey: body.clearClaude === true ? "" : submittedClaudeKey ?? currentKeys.claudeApiKey,
-    };
-    await saveAssistantApiKeys(nextKeys);
+    const geminiApiKey = body.clearGemini === true ? "" : submittedGeminiKey ?? currentKey;
+    await saveGeminiApiKey({ geminiApiKey });
     return Response.json(await getAssistantKeyStatus(), { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Unable to save assistant settings on this server." }, { status: 500 });

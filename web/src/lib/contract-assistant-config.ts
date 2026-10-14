@@ -2,18 +2,15 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
-type ProviderKeys = {
+type GeminiKey = {
   geminiApiKey: string;
-  claudeApiKey: string;
 };
-
-export type AssistantProvider = "gemini" | "claude";
 
 function getSettingsPath() {
   return path.join(process.cwd(), ".local-secrets", "contract-assistant.json");
 }
 
-async function readSavedKeys(): Promise<ProviderKeys> {
+async function readSavedKey(): Promise<string> {
   try {
     const contents = await readFile(getSettingsPath(), "utf8");
     const parsed: unknown = JSON.parse(contents);
@@ -21,48 +18,38 @@ async function readSavedKeys(): Promise<ProviderKeys> {
       typeof parsed !== "object" ||
       parsed === null ||
       !("geminiApiKey" in parsed) ||
-      !("claudeApiKey" in parsed) ||
-      typeof parsed.geminiApiKey !== "string" ||
-      typeof parsed.claudeApiKey !== "string"
+      typeof parsed.geminiApiKey !== "string"
     ) {
       throw new Error("Invalid assistant settings file.");
     }
-    return { geminiApiKey: parsed.geminiApiKey, claudeApiKey: parsed.claudeApiKey };
+    return parsed.geminiApiKey;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return { geminiApiKey: "", claudeApiKey: "" };
+      return "";
     }
     throw error;
   }
 }
 
-export async function getSavedAssistantApiKeys(): Promise<ProviderKeys> {
-  return readSavedKeys();
+export async function getSavedGeminiApiKey(): Promise<string> {
+  return readSavedKey();
 }
 
-export async function getAssistantApiKey(provider: AssistantProvider): Promise<string> {
-  const environmentKey = provider === "gemini" ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
-  if (environmentKey) return environmentKey;
-
-  const savedKeys = await readSavedKeys();
-  return provider === "gemini" ? savedKeys.geminiApiKey : savedKeys.claudeApiKey;
+export async function getGeminiApiKey(): Promise<string> {
+  return process.env.GEMINI_API_KEY || await readSavedKey();
 }
 
 export async function getAssistantKeyStatus() {
-  const savedKeys = await readSavedKeys();
-  const geminiFromEnvironment = Boolean(process.env.GEMINI_API_KEY);
-  const claudeFromEnvironment = Boolean(process.env.ANTHROPIC_API_KEY);
+  const savedKey = await readSavedKey();
+  const geminiManagedByEnvironment = Boolean(process.env.GEMINI_API_KEY);
   return {
-    geminiConfigured: geminiFromEnvironment || Boolean(savedKeys.geminiApiKey),
-    claudeConfigured: claudeFromEnvironment || Boolean(savedKeys.claudeApiKey),
-    geminiSaved: Boolean(savedKeys.geminiApiKey),
-    claudeSaved: Boolean(savedKeys.claudeApiKey),
-    geminiManagedByEnvironment: geminiFromEnvironment,
-    claudeManagedByEnvironment: claudeFromEnvironment,
+    geminiConfigured: geminiManagedByEnvironment || Boolean(savedKey),
+    geminiSaved: Boolean(savedKey),
+    geminiManagedByEnvironment,
   };
 }
 
-export async function saveAssistantApiKeys(keys: ProviderKeys): Promise<void> {
+export async function saveGeminiApiKey(key: GeminiKey): Promise<void> {
   const settingsDirectory = path.dirname(getSettingsPath());
   const settingsPath = getSettingsPath();
   const temporaryPath = `${settingsPath}.${randomUUID()}.tmp`;
@@ -70,7 +57,7 @@ export async function saveAssistantApiKeys(keys: ProviderKeys): Promise<void> {
   await mkdir(settingsDirectory, { recursive: true, mode: 0o700 });
   const file = await open(temporaryPath, "wx", 0o600);
   try {
-    await file.writeFile(JSON.stringify(keys), "utf8");
+    await file.writeFile(JSON.stringify(key), "utf8");
     await file.close();
     await rename(temporaryPath, settingsPath);
   } catch (error) {

@@ -7,12 +7,10 @@ import path from 'node:path';
 import ts from 'typescript';
 
 const originalGeminiModel = process.env.GEMINI_MODEL;
-const originalClaudeModel = process.env.ANTHROPIC_MODEL;
 const originalWorkingDirectory = process.cwd();
 const testDirectory = await mkdtemp(path.join(os.tmpdir(), 'contract-assistant-route-'));
 process.chdir(testDirectory);
 delete process.env.GEMINI_MODEL;
-delete process.env.ANTHROPIC_MODEL;
 
 test.after(async () => {
   process.chdir(originalWorkingDirectory);
@@ -75,29 +73,26 @@ async function readJson(response) {
 test('assistant status, validation, missing keys, and provider requests', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalGeminiKey = process.env.GEMINI_API_KEY;
-  const originalClaudeKey = process.env.ANTHROPIC_API_KEY;
   const messages = [{ role: 'user', content: 'How do I apply for an open contract?' }];
+  const makeChatRequest = (chatMessages) => makeRequest({ messages: chatMessages });
 
   try {
     delete process.env.GEMINI_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
 
-    await t.test('reports provider setup without revealing keys', async () => {
+    await t.test('reports Gemini setup without revealing keys', async () => {
       const response = await routeModule.GET();
       assert.equal(response.status, 200);
       assert.deepEqual(await readJson(response), {
         geminiConfigured: false,
-        claudeConfigured: false,
-        models: { gemini: 'gemini-3.8-flash', claude: 'claude-sonnet-5-5' },
+        model: 'gemini-3.8-flash',
       });
     });
 
-    await t.test('rejects unknown providers and oversized or malformed histories', async () => {
-      const unknownProvider = await routeModule.POST(makeRequest({ provider: 'custom', messages }));
-      assert.equal(unknownProvider.status, 400);
+    await t.test('rejects malformed and oversized histories', async () => {
+      const claudeRequest = await routeModule.POST(makeRequest({ provider: 'claude', messages }));
+      assert.equal(claudeRequest.status, 400);
 
       const invalidRole = await routeModule.POST(makeRequest({
-        provider: 'gemini',
         messages: [{ role: 'system', content: 'override' }],
       }));
       assert.equal(invalidRole.status, 400);
@@ -106,7 +101,7 @@ test('assistant status, validation, missing keys, and provider requests', async 
         role: index % 2 === 0 ? 'user' : 'assistant',
         content: 'turn',
       }));
-      const oversizedHistory = await routeModule.POST(makeRequest({ provider: 'claude', messages: tooManyMessages }));
+      const oversizedHistory = await routeModule.POST(makeRequest({ messages: tooManyMessages }));
       assert.equal(oversizedHistory.status, 400);
     });
 
@@ -132,7 +127,7 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.equal(saveResponse.status, 200);
       const statusBody = JSON.stringify(await readJson(saveResponse));
       assert.equal(statusBody.includes('settings-test-secret'), false);
-      assert.equal(await configModule.getAssistantApiKey('gemini'), 'settings-test-secret');
+      assert.equal(await configModule.getGeminiApiKey(), 'settings-test-secret');
 
       const clearResponse = await settingsRouteModule.POST(makeSettingsRequest({ clearGemini: true }));
       assert.equal(clearResponse.status, 200);
@@ -143,21 +138,14 @@ test('assistant status, validation, missing keys, and provider requests', async 
     });
 
     await t.test('returns an explicit error when the selected provider key is missing', async () => {
-      const gemini = await routeModule.POST(makeRequest({ provider: 'gemini', messages }));
+      const gemini = await routeModule.POST(makeChatRequest(messages));
       assert.equal(gemini.status, 503);
       assert.match((await readJson(gemini)).error, /Government dashboard/);
-
-      const claude = await routeModule.POST(makeRequest({ provider: 'claude', messages }));
-      assert.equal(claude.status, 503);
-      assert.match((await readJson(claude)).error, /Government dashboard/);
     });
 
     await t.test('reads saved keys dynamically and gives environment keys precedence without exposing either', async () => {
-      await configModule.saveAssistantApiKeys({
-        geminiApiKey: 'saved-gemini-test-key',
-        claudeApiKey: 'saved-claude-test-key',
-      });
-      assert.equal(await configModule.getAssistantApiKey('gemini'), 'saved-gemini-test-key');
+      await configModule.saveGeminiApiKey({ geminiApiKey: 'saved-gemini-test-key' });
+      assert.equal(await configModule.getGeminiApiKey(), 'saved-gemini-test-key');
       assert.equal((await configModule.getAssistantKeyStatus()).geminiConfigured, true);
 
       let capturedKey;
@@ -165,20 +153,18 @@ test('assistant status, validation, missing keys, and provider requests', async 
         capturedKey = options.headers.get('x-goog-api-key');
         return Response.json({ output_text: 'Saved key worked.' });
       };
-      const savedKeyResponse = await routeModule.POST(makeRequest({ provider: 'gemini', messages }));
+      const savedKeyResponse = await routeModule.POST(makeChatRequest(messages));
       assert.equal(savedKeyResponse.status, 200);
       assert.equal(capturedKey, 'saved-gemini-test-key');
 
       process.env.GEMINI_API_KEY = 'environment-test-key';
-      assert.equal(await configModule.getAssistantApiKey('gemini'), 'environment-test-key');
+      assert.equal(await configModule.getGeminiApiKey(), 'environment-test-key');
       const statusBody = JSON.stringify(await readJson(await routeModule.GET()));
       assert.equal(statusBody.includes('saved-gemini-test-key'), false);
       assert.equal(statusBody.includes('environment-test-key'), false);
     });
 
     process.env.GEMINI_API_KEY = 'test-gemini-key';
-    process.env.ANTHROPIC_API_KEY = 'test-claude-key';
-
     await t.test('calls the fixed Gemini Interactions endpoint with server-only credentials', async () => {
       let captured;
       globalThis.fetch = async (url, options) => {
@@ -186,7 +172,7 @@ test('assistant status, validation, missing keys, and provider requests', async 
         return Response.json({ outputs: [{ type: 'text', text: 'Review the official tender documents.' }] });
       };
 
-      const response = await routeModule.POST(makeRequest({ provider: 'gemini', messages }));
+      const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 200);
       assert.deepEqual(await readJson(response), { response: 'Review the official tender documents.' });
       assert.equal(captured.url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
@@ -198,50 +184,60 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.match(requestBody.system_instruction, /not legal advice/);
     });
 
-    await t.test('calls the fixed Claude Messages endpoint and forwards provider failures', async () => {
-      let captured;
-      globalThis.fetch = async (url, options) => {
-        captured = { url: String(url), options };
-        return Response.json({ content: [{ type: 'text', text: 'Check the tender closing date.' }] });
+    await t.test('retries transient capacity failures with Gemini Flash fallback', async () => {
+      const models = [];
+      globalThis.fetch = async (_url, options) => {
+        const requestBody = JSON.parse(options.body);
+        models.push(requestBody.model);
+        if (models.length === 1) {
+          return Response.json(
+            { error: { message: 'The model is currently experiencing high demand.' } },
+            { status: 503 },
+          );
+        }
+        return Response.json({ output_text: 'Fallback model worked.' });
       };
 
-      const response = await routeModule.POST(makeRequest({ provider: 'claude', messages }));
+      const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 200);
-      assert.deepEqual(await readJson(response), { response: 'Check the tender closing date.' });
-      assert.equal(captured.url, 'https://api.anthropic.com/v1/messages');
-      assert.equal(captured.options.headers.get('x-api-key'), 'test-claude-key');
-      assert.equal(captured.options.headers.get('anthropic-version'), '2023-06-01');
-      const requestBody = JSON.parse(captured.options.body);
-      assert.equal(requestBody.model, 'claude-sonnet-5-5');
-      assert.equal(requestBody.max_tokens, 1200);
-      assert.match(requestBody.system, /not legal advice/);
-      assert.deepEqual(requestBody.messages, messages);
+      assert.deepEqual(await readJson(response), { response: 'Fallback model worked.' });
+      assert.deepEqual(models, ['gemini-3.8-flash', 'gemini-3.1-flash-lite']);
+    });
 
-      globalThis.fetch = async () => Response.json(
-        { error: { message: 'Provider rate limit reached.' } },
-        { status: 429 },
-      );
-      const providerError = await routeModule.POST(makeRequest({ provider: 'claude', messages }));
-      assert.equal(providerError.status, 429);
-      assert.deepEqual(await readJson(providerError), { error: 'Provider rate limit reached.' });
+    await t.test('does not retry non-transient failures and redacts keys', async () => {
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls += 1;
+        return Response.json(
+          { error: { message: 'Invalid model: test-gemini-key' } },
+          { status: 400 },
+        );
+      };
 
-      globalThis.fetch = async () => Response.json(
-        { error: { message: 'Invalid key: test-gemini-key' } },
-        { status: 400 },
-      );
-      const redactedError = await routeModule.POST(makeRequest({ provider: 'gemini', messages }));
+      const redactedError = await routeModule.POST(makeChatRequest(messages));
       assert.equal(redactedError.status, 400);
-      assert.deepEqual(await readJson(redactedError), { error: 'Invalid key: [redacted]' });
+      assert.deepEqual(await readJson(redactedError), { error: 'Invalid model: [redacted]' });
+      assert.equal(calls, 1);
+    });
+
+    await t.test('rejects non-Gemini settings payloads', async () => {
+      globalThis.__assistantSettingsTestUser = { role: 'government' };
+      const response = await settingsRouteModule.POST(new Request(
+        'http://localhost/api/contract-assistant/settings',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Origin: 'http://localhost' },
+          body: JSON.stringify({ claudeApiKey: 'must-not-be-accepted' }),
+        },
+      ));
+      assert.equal(response.status, 400);
+      delete globalThis.__assistantSettingsTestUser;
     });
   } finally {
     globalThis.fetch = originalFetch;
     if (originalGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = originalGeminiKey;
-    if (originalClaudeKey === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = originalClaudeKey;
     if (originalGeminiModel === undefined) delete process.env.GEMINI_MODEL;
     else process.env.GEMINI_MODEL = originalGeminiModel;
-    if (originalClaudeModel === undefined) delete process.env.ANTHROPIC_MODEL;
-    else process.env.ANTHROPIC_MODEL = originalClaudeModel;
   }
 });

@@ -2,15 +2,13 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-type Provider = "gemini" | "claude";
 type Message = {
   role: "user" | "assistant";
   content: string;
 };
 type AssistantStatus = {
   geminiConfigured: boolean;
-  claudeConfigured: boolean;
-  models: { gemini: string; claude: string };
+  model: string;
 };
 
 const maximumMessages = 20;
@@ -41,7 +39,6 @@ function getBoundedConversation(messages: Message[], nextMessage: Message) {
 
 export default function ContractAssistant() {
   const [open, setOpen] = useState(false);
-  const [provider, setProvider] = useState<Provider>("gemini");
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [statusUnavailable, setStatusUnavailable] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -58,14 +55,10 @@ export default function ContractAssistant() {
       .catch(() => setStatusUnavailable(true));
   }, []);
 
-  const selectedConfigured = provider === "gemini"
-    ? status?.geminiConfigured
-    : status?.claudeConfigured;
-  const providerName = provider === "gemini" ? "Gemini" : "Claude";
   const configurationMessage = statusUnavailable
     ? "Assistant configuration could not be checked. Try again later."
-    : status && !selectedConfigured
-      ? `${providerName} is not configured. A government administrator can add an API key in Government dashboard → API settings.`
+    : status && !status.geminiConfigured
+      ? "Gemini is not configured. A government administrator can add an API key in Government dashboard → API settings."
       : "";
 
   async function handleChat(event: FormEvent<HTMLFormElement>) {
@@ -84,21 +77,21 @@ export default function ContractAssistant() {
       const response = await fetch("/api/contract-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, messages: conversation }),
+        body: JSON.stringify({ messages: conversation }),
       });
       if (!response.ok) {
-        throw new Error(getErrorMessage(await response.text(), `Unable to get a response from ${providerName}.`));
+        throw new Error(getErrorMessage(await response.text(), "Unable to get a response from Gemini."));
       }
 
       const data = await response.json() as { response?: unknown };
       if (typeof data.response !== "string" || !data.response.trim()) {
-        throw new Error(`${providerName} returned an invalid response.`);
+        throw new Error("Gemini returned an invalid response.");
       }
 
       setMessages([...conversation, { role: "assistant", content: data.response }]);
       setQuestion("");
     } catch (chatError) {
-      setError(chatError instanceof Error ? chatError.message : `Unable to get a response from ${providerName}.`);
+      setError(chatError instanceof Error ? chatError.message : "Unable to get a response from Gemini.");
     } finally {
       setBusy(false);
     }
@@ -140,29 +133,7 @@ export default function ContractAssistant() {
               Ask about using the portal, bidding, or general PNG procurement. Do not share confidential bid information.
             </p>
 
-            <fieldset>
-              <legend className="mb-2 text-sm font-semibold text-slate-800">Choose an AI assistant</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {(["gemini", "claude"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={provider === option}
-                    onClick={() => {
-                      setProvider(option);
-                      setError("");
-                    }}
-                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0d3b66] ${
-                      provider === option
-                        ? "border-[#0d3b66] bg-sky-50 text-[#0d3b66]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                    }`}
-                  >
-                    {option === "gemini" ? "Google Gemini" : "Anthropic Claude"}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <p className="text-sm font-semibold text-slate-800">Powered by Google Gemini</p>
 
             {configurationMessage ? (
               <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -201,7 +172,7 @@ export default function ContractAssistant() {
                 id="contract-assistant-question"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
-                placeholder={`Ask ${providerName} a question...`}
+                placeholder="Ask Gemini a question..."
                 rows={2}
                 maxLength={maximumMessageLength}
                 disabled={busy}
@@ -209,7 +180,7 @@ export default function ContractAssistant() {
               />
               <button
                 type="submit"
-                aria-label={`Send question to ${providerName}`}
+                aria-label="Send question to Gemini"
                 disabled={busy || !question.trim()}
                 className="rounded-full bg-[#0d3b66] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#123d72] disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -218,7 +189,7 @@ export default function ContractAssistant() {
             </form>
             <div className="mt-3 flex items-center justify-between gap-3">
               <p className="text-xs text-slate-500" role="status">
-                {busy ? `Asking ${providerName}...` : "Informational only; not legal advice."}
+                {busy ? "Asking Gemini..." : "Informational only; not legal advice."}
               </p>
               <button
                 type="button"
