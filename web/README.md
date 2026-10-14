@@ -22,7 +22,7 @@ The text-only assistant uses Google Gemini through the portal's same-origin rout
 
 The local file is intended only for a single local development server. For deployment, set `GEMINI_API_KEY` in the hosting provider's secret manager; the environment variable takes priority over the key saved through the settings page. Do not commit or share the key. Run the route tests with `npm test`.
 
-The default model is `gemini-2.5-flash`. On HTTP 429 or 503 errors that explicitly report rate limiting or temporary capacity pressure (and not quota exhaustion), the assistant retries once with `gemini-3.8-flash`. Quota errors and other failures are reported without retrying. Optionally set the server-only `GEMINI_MODEL` environment variable to override the primary model. The portal calls Google's Gemini Interactions API directly at its fixed official endpoint; no provider URL is configurable by the browser.
+Before each chat request, the server uses Google's ListModels API with the server-only key to discover stable Gemini Flash models that support text generation. It prefers `GEMINI_MODEL` when that model is listed, then `gemini-2.5-flash`, and then other listed stable Flash models. If a listed model is rejected by the Interactions API or reports transient rate limiting/capacity pressure, it tries the next listed candidate; quota and unrelated errors are returned without model retries. ListModels and chat requests send the key in an authorization header, never in the URL. The portal calls Google's APIs at fixed official endpoints; no provider URL is configurable by the browser.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

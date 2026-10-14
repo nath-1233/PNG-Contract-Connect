@@ -70,6 +70,25 @@ async function readJson(response) {
   return response.json();
 }
 
+function mockGeminiFetch(
+  interactionFetch,
+  modelNames = ['gemini-2.5-flash', 'gemini-3.8-flash'],
+  modelListFetch,
+) {
+  return async (url, options) => {
+    if (String(url).endsWith('/v1beta/models')) {
+      if (modelListFetch) return modelListFetch(url, options);
+      return Response.json({
+        models: modelNames.map((name) => ({
+          name: `models/${name}`,
+          supportedGenerationMethods: ['generateContent'],
+        })),
+      });
+    }
+    return interactionFetch(url, options);
+  };
+}
+
 test('assistant status, validation, missing keys, and provider requests', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalGeminiKey = process.env.GEMINI_API_KEY;
@@ -164,10 +183,10 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.equal((await configModule.getAssistantKeyStatus()).geminiConfigured, true);
 
       let capturedKey;
-      globalThis.fetch = async (_url, options) => {
+      globalThis.fetch = mockGeminiFetch(async (_url, options) => {
         capturedKey = options.headers.get('x-goog-api-key');
         return Response.json({ output_text: 'Saved key worked.' });
-      };
+      });
       const savedKeyResponse = await routeModule.POST(makeChatRequest(messages));
       assert.equal(savedKeyResponse.status, 200);
       assert.equal(capturedKey, 'saved-gemini-test-key');
@@ -182,16 +201,25 @@ test('assistant status, validation, missing keys, and provider requests', async 
     process.env.GEMINI_API_KEY = 'test-gemini-key';
     await t.test('calls the fixed Gemini Interactions endpoint with server-only credentials', async () => {
       let captured;
-      globalThis.fetch = async (url, options) => {
+      let modelListRequest;
+      globalThis.fetch = mockGeminiFetch(async (url, options) => {
         captured = { url: String(url), options };
         return Response.json({ outputs: [{ type: 'text', text: 'Review the official tender documents.' }] });
-      };
+      }, undefined, async (url, options) => {
+        modelListRequest = { url: String(url), options };
+        return Response.json({
+          models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }],
+        });
+      });
 
       const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 200);
       assert.deepEqual(await readJson(response), { response: 'Review the official tender documents.' });
       assert.equal(captured.url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
       assert.equal(captured.options.headers.get('x-goog-api-key'), 'test-gemini-key');
+      assert.equal(modelListRequest.url, 'https://generativelanguage.googleapis.com/v1beta/models');
+      assert.equal(modelListRequest.url.includes('test-gemini-key'), false);
+      assert.equal(new Headers(modelListRequest.options.headers).get('x-goog-api-key'), 'test-gemini-key');
       const requestBody = JSON.parse(captured.options.body);
       assert.equal(requestBody.model, 'gemini-2.5-flash');
       assert.equal(requestBody.input, 'User: How do I apply for an open contract?');
@@ -199,9 +227,21 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.match(requestBody.system_instruction, /not legal advice/);
     });
 
+    await t.test('reports model-list authentication failures without exposing provider details', async () => {
+      globalThis.fetch = async () => Response.json(
+        { error: { message: 'API key test-gemini-key is invalid' } },
+        { status: 403 },
+      );
+      const response = await routeModule.POST(makeChatRequest(messages));
+      const responseBody = JSON.stringify(await readJson(response));
+      assert.equal(response.status, 502);
+      assert.match(responseBody, /API key authentication failed/);
+      assert.equal(responseBody.includes('test-gemini-key'), false);
+    });
+
     await t.test('retries a rate-limit response once with Gemini 3.8 Flash fallback', async () => {
       const models = [];
-      globalThis.fetch = async (_url, options) => {
+      globalThis.fetch = mockGeminiFetch(async (_url, options) => {
         const requestBody = JSON.parse(options.body);
         models.push(requestBody.model);
         if (models.length === 1) {
@@ -211,7 +251,7 @@ test('assistant status, validation, missing keys, and provider requests', async 
           );
         }
         return Response.json({ output_text: 'Fallback model worked.' });
-      };
+      });
 
       const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 200);
@@ -221,13 +261,13 @@ test('assistant status, validation, missing keys, and provider requests', async 
 
     await t.test('does not retry a non-capacity 503 and redacts keys', async () => {
       let calls = 0;
-      globalThis.fetch = async () => {
+      globalThis.fetch = mockGeminiFetch(async () => {
         calls += 1;
         return Response.json(
           { error: { message: 'Internal server error: test-gemini-key' } },
           { status: 503 },
         );
-      };
+      });
 
       const redactedError = await routeModule.POST(makeChatRequest(messages));
       assert.equal(redactedError.status, 503);
@@ -235,33 +275,68 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.equal(calls, 1);
     });
 
-    await t.test('reports an unavailable primary model without retrying', async () => {
+    await t.test('discovers models and continues when a listed model is not accepted by Interactions', async () => {
       const models = [];
-      globalThis.fetch = async (_url, options) => {
+      globalThis.fetch = mockGeminiFetch(async (_url, options) => {
         models.push(JSON.parse(options.body).model);
-        return Response.json(
-          { error: { message: 'This model is no longer available to new users.' } },
-          { status: 404 },
-        );
+        if (models.length === 1) {
+          return Response.json(
+            { error: { message: 'This model is no longer available to new users.' } },
+            { status: 404 },
+          );
+        }
+        return Response.json({ output_text: 'Discovered model worked.' });
+      });
+
+      const response = await routeModule.POST(makeChatRequest(messages));
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readJson(response), { response: 'Discovered model worked.' });
+      assert.deepEqual(models, ['gemini-2.5-flash', 'gemini-3.8-flash']);
+    });
+
+    await t.test('selects a stable Flash model returned by ListModels', async () => {
+      let selectedModel;
+      globalThis.fetch = mockGeminiFetch(async (_url, options) => {
+        selectedModel = JSON.parse(options.body).model;
+        return Response.json({ output_text: 'Available model worked.' });
+      }, ['gemini-2.0-flash', 'gemini-2.5-flash-preview-05-20', 'gemini-2.5-pro']);
+
+      const response = await routeModule.POST(makeChatRequest(messages));
+      assert.equal(response.status, 200);
+      assert.equal(selectedModel, 'gemini-2.0-flash');
+    });
+
+    await t.test('reports when ListModels has no stable Flash model for text generation', async () => {
+      let interactionCalls = 0;
+      globalThis.fetch = async (url) => {
+        if (String(url).endsWith('/v1beta/models')) {
+          return Response.json({
+            models: [
+              { name: 'models/gemini-2.5-flash-preview-05-20', supportedGenerationMethods: ['generateContent'] },
+              { name: 'models/gemini-2.5-pro', supportedGenerationMethods: ['generateContent'] },
+              { name: 'models/gemini-2.5-flash-lite', supportedGenerationMethods: ['countTokens'] },
+            ],
+          });
+        }
+        interactionCalls += 1;
+        return Response.json({ output_text: 'unexpected' });
       };
 
       const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 503);
-      assert.deepEqual(await readJson(response), {
-        error: "The configured Gemini model is not available to this API key. Enable gemini-2.5-flash in Google AI Studio or set GEMINI_MODEL to a model available to this key.",
-      });
-      assert.deepEqual(models, ['gemini-2.5-flash']);
+      assert.match((await readJson(response)).error, /No listed Gemini Flash model/);
+      assert.equal(interactionCalls, 0);
     });
 
     await t.test('reports quota exhaustion without retrying', async () => {
       let calls = 0;
-      globalThis.fetch = async () => {
+      globalThis.fetch = mockGeminiFetch(async () => {
         calls += 1;
         return Response.json(
           { error: { message: 'You exceeded your current quota.' } },
           { status: 429 },
         );
-      };
+      });
 
       const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 429);
@@ -273,18 +348,18 @@ test('assistant status, validation, missing keys, and provider requests', async 
 
     await t.test('reports temporary overload after fallback is also at capacity', async () => {
       const models = [];
-      globalThis.fetch = async (_url, options) => {
+      globalThis.fetch = mockGeminiFetch(async (_url, options) => {
         models.push(JSON.parse(options.body).model);
         return Response.json(
           { error: { message: 'The model is currently experiencing high demand.' } },
           { status: 503 },
         );
-      };
+      });
 
       const response = await routeModule.POST(makeChatRequest(messages));
       assert.equal(response.status, 503);
       assert.deepEqual(await readJson(response), {
-        error: "Gemini is temporarily at capacity after retrying with gemini-3.8-flash. Please wait a few minutes and try again.",
+        error: "All Gemini Flash models available to this API key are temporarily at capacity. Please wait a few minutes and try again.",
       });
       assert.deepEqual(models, ['gemini-2.5-flash', 'gemini-3.8-flash']);
     });

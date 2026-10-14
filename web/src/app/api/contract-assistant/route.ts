@@ -1,7 +1,7 @@
 import { getAssistantKeyStatus, getGeminiApiKey } from "@/lib/contract-assistant-config";
 
-const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const geminiFallbackModel = "gemini-3.8-flash";
+const preferredGeminiModel = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+const preferredGeminiModels = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite"];
 const maximumBodyLength = 96_000;
 const maximumMessages = 20;
 const maximumMessageLength = 6_000;
@@ -83,12 +83,72 @@ function isGeminiQuotaError(message: string) {
   return /quota|billing|daily limit|insufficient (?:credit|fund)/i.test(message);
 }
 
+function isUnavailableGeminiModel(response: Response, message: string) {
+  return (response.status === 400 || response.status === 404) &&
+    /model.+(?:not available|no longer available|not enabled|not found)/i.test(message);
+}
+
 function getGeminiQuotaMessage() {
   return "Gemini API quota is exhausted for this key. Check its quota and billing status in Google AI Studio, then try again.";
 }
 
 function getGeminiUnavailableModelMessage() {
-  return "The configured Gemini model is not available to this API key. Enable gemini-2.5-flash in Google AI Studio or set GEMINI_MODEL to a model available to this key.";
+  return "No listed Gemini Flash model is available through the assistant API for this key. In Google AI Studio, enable a stable Gemini Flash model for this key, then try again.";
+}
+
+async function listAvailableGeminiFlashModels(apiKey: string): Promise<string[]> {
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {
+    headers: { "x-goog-api-key": apiKey },
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    const message = await getGeminiErrorMessage(response, apiKey);
+    if (isGeminiQuotaError(message)) {
+      throw new Error(getGeminiQuotaMessage());
+    }
+    if (
+      response.status === 401 ||
+      response.status === 403 ||
+      (response.status === 400 && /(?:api[_ ]key).*(?:invalid|not valid)|invalid api key/i.test(message))
+    ) {
+      throw new Error("Gemini API key authentication failed while checking available models. Check that the key is active.");
+    }
+    throw new Error("Unable to check which Gemini models are available to this API key.");
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("Google returned an invalid Gemini model list.");
+  }
+  if (!isRecord(body) || !Array.isArray(body.models)) {
+    throw new Error("Google returned an invalid Gemini model list.");
+  }
+
+  const available = body.models.flatMap((entry): string[] => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.name !== "string" ||
+      !Array.isArray(entry.supportedGenerationMethods) ||
+      !entry.supportedGenerationMethods.includes("generateContent")
+    ) {
+      return [];
+    }
+    const model = entry.name.replace(/^models\//, "");
+    if (!/^gemini-[a-z0-9.-]*flash[a-z0-9.-]*$/i.test(model) || /preview|image|live|tts|audio/i.test(model)) {
+      return [];
+    }
+    return [model];
+  });
+
+  const uniqueAvailable = [...new Set(available)];
+  const preferredOrder = [preferredGeminiModel, ...preferredGeminiModels];
+  return [
+    ...preferredOrder.filter((model, index) => uniqueAvailable.includes(model) && preferredOrder.indexOf(model) === index),
+    ...uniqueAvailable.filter((model) => !preferredOrder.includes(model)).sort(),
+  ];
 }
 
 function logGeminiTransportFailure(model: string, error: unknown) {
@@ -141,7 +201,7 @@ export async function GET() {
     return Response.json(
       {
         geminiConfigured: status.geminiConfigured,
-        model: geminiModel,
+        model: preferredGeminiModel,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -198,6 +258,27 @@ export async function POST(request: Request) {
     );
   }
 
+  let availableModels: string[];
+  try {
+    availableModels = await listAvailableGeminiFlashModels(apiKey);
+  } catch (error) {
+    const safeMessage = error instanceof Error && [
+      getGeminiQuotaMessage(),
+      "Gemini API key authentication failed while checking available models. Check that the key is active.",
+      "Unable to check which Gemini models are available to this API key.",
+      "Google returned an invalid Gemini model list.",
+    ].includes(error.message)
+      ? error.message
+      : "Unable to check which Gemini models are available to this API key.";
+    return Response.json(
+      { error: safeMessage },
+      { status: safeMessage === getGeminiQuotaMessage() ? 429 : 502 },
+    );
+  }
+  if (availableModels.length === 0) {
+    return Response.json({ error: getGeminiUnavailableModelMessage() }, { status: 503 });
+  }
+
   const upstreamUrl = "https://generativelanguage.googleapis.com/v1beta/interactions";
   const headers = new Headers({ "Content-Type": "application/json" });
   headers.set("x-goog-api-key", apiKey);
@@ -216,79 +297,53 @@ export async function POST(request: Request) {
     signal: AbortSignal.timeout(45_000),
   });
 
-  let upstream: Response;
-  try {
-    upstream = await requestGemini(geminiModel);
-  } catch (error) {
-    logGeminiTransportFailure(geminiModel, error);
-    return Response.json(
-      { error: "The portal server could not connect to Gemini. Check outbound HTTPS access to generativelanguage.googleapis.com and try again." },
-      { status: 502 },
-    );
-  }
+  let lastTransientError: { message: string; status: number } | null = null;
+  for (const model of availableModels) {
+    let upstream: Response;
+    try {
+      upstream = await requestGemini(model);
+    } catch (error) {
+      logGeminiTransportFailure(model, error);
+      return Response.json(
+        { error: "The portal server could not connect to Gemini. Check outbound HTTPS access to generativelanguage.googleapis.com and try again." },
+        { status: 502 },
+      );
+    }
 
-  if (!upstream.ok) {
-    const primaryError = await getGeminiErrorMessage(upstream, apiKey);
-    if (isGeminiQuotaError(primaryError)) {
-      return Response.json({ error: getGeminiQuotaMessage() }, { status: 429 });
-    }
-    if (upstream.status === 404 && /model.+(?:not available|no longer available|not enabled)/i.test(primaryError)) {
-      return Response.json({ error: getGeminiUnavailableModelMessage() }, { status: 503 });
-    }
-    if (geminiModel !== geminiFallbackModel && isTransientGeminiError(upstream, primaryError)) {
-      try {
-        upstream = await requestGemini(geminiFallbackModel);
-      } catch (error) {
-        logGeminiTransportFailure(geminiFallbackModel, error);
-        return Response.json(
-          { error: "The portal server could not connect to Gemini. Check outbound HTTPS access to generativelanguage.googleapis.com and try again." },
-          { status: 502 },
-        );
+    if (!upstream.ok) {
+      const message = await getGeminiErrorMessage(upstream, apiKey);
+      if (isGeminiQuotaError(message)) {
+        return Response.json({ error: getGeminiQuotaMessage() }, { status: 429 });
       }
-    } else {
-      return Response.json({ error: primaryError }, { status: upstream.status });
+      if (isUnavailableGeminiModel(upstream, message)) {
+        continue;
+      }
+      if (isTransientGeminiError(upstream, message)) {
+        lastTransientError = { message, status: upstream.status };
+        continue;
+      }
+      return Response.json({ error: message }, { status: upstream.status });
     }
+
+    let upstreamData: unknown;
+    try {
+      upstreamData = await upstream.json();
+    } catch {
+      return Response.json({ error: "Gemini returned an invalid response." }, { status: 502 });
+    }
+
+    const answer = getGeminiResponseText(upstreamData);
+    if (!answer) {
+      return Response.json({ error: "Gemini did not return a text answer." }, { status: 502 });
+    }
+    return Response.json({ response: answer }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  if (!upstream.ok) {
-    const fallbackError = await getGeminiErrorMessage(upstream, apiKey);
-    if (isGeminiQuotaError(fallbackError)) {
-      return Response.json({ error: getGeminiQuotaMessage() }, { status: 429 });
-    }
-    if (/model.+(?:not available|no longer available|not enabled)/i.test(fallbackError)) {
-      return Response.json(
-        { error: "Gemini is temporarily unavailable, and the fallback model is not available to this API key. Enable an available Flash model in Google AI Studio or try again later." },
-        { status: 503 },
-      );
-    }
-    if (isTransientGeminiError(upstream, fallbackError)) {
-      return Response.json(
-        { error: "Gemini is temporarily at capacity after retrying with gemini-3.8-flash. Please wait a few minutes and try again." },
-        { status: upstream.status },
-      );
-    }
-    return Response.json({ error: fallbackError }, { status: upstream.status });
-  }
-
-  let upstreamData: unknown;
-  try {
-    upstreamData = await upstream.json();
-  } catch {
+  if (lastTransientError) {
     return Response.json(
-      { error: "Gemini returned an invalid response." },
-      { status: 502 },
+      { error: "All Gemini Flash models available to this API key are temporarily at capacity. Please wait a few minutes and try again." },
+      { status: lastTransientError.status },
     );
   }
-
-  let answer: string | null = null;
-  answer = getGeminiResponseText(upstreamData);
-
-  if (!answer) {
-    return Response.json(
-      { error: "Gemini did not return a text answer." },
-      { status: 502 },
-    );
-  }
-
-  return Response.json({ response: answer }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ error: getGeminiUnavailableModelMessage() }, { status: 503 });
 }
