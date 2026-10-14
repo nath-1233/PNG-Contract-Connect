@@ -1,0 +1,98 @@
+[
+  {
+    "id": "road-maintenance-services",
+    "title": "National Road Maintenance Services",
+    "department": "Department of Works",
+    "location": "Port Moresby, National Capital District",
+    "category": "Roads and Infrastructure",
+    "value": "PGK 8.4M",
+    "deadline": "14 Nov 2026",
+    "closing": "14 Nov 2026, 5:00 PM (UTC+10)",
+    "status": "Open",
+    "summary": "Provision of scheduled and emergency road maintenance services across key urban and provincial routes, including asphalt repair, drainage maintenance, and traffic management support.",
+    "requirements": [
+      "Registered construction or civil works contractor",
+      "Evidence of experience in road maintenance projects of similar scale",
+      "Financial capability and appropriate equipment list",
+      "Ability to provide labor, traffic management, and site supervision"
+    ],
+    "documents": [
+      "Company registration and tax certificates",
+      "Past performance reports",
+      "Technical proposal and methodology",
+      "Updated financial statements"
+    ]
+  },
+  {
+    "id": "digital-records-platform",
+    "title": "Digital Records Management Platform",
+    "department": "Department of Finance",
+    "location": "Lae, Morobe",
+    "category": "Information Technology and Software Development",
+    "value": "PGK 1.9M",
+    "deadline": "03 Dec 2026",
+    "closing": "03 Dec 2026, 2:00 PM (UTC+10)",
+    "status": "Open",
+    "summary": "Design, implementation, and support of a digital records management platform for departmental document control, searchability, retention, and secure access workflows.",
+    "requirements": [
+      "ICT service provider with enterprise software deployment experience",
+      "Compliance with data privacy and access control requirements",
+      "Host environment support and training capability",
+      "Demonstrated project delivery within government settings"
+    ],
+    "documents": [
+      "Technical proposal",
+      "Implementation roadmap",
+      "Past project references",
+      "Security and data protection approach"
+    ]
+  },
+  {
+    "id": "rural-health-clinic-supply",
+    "title": "Rural Health Clinic Supply Contract",
+    "department": "Provincial Health Authority",
+    "location": "Kokopo, East New Britain",
+    "category": "Healthcare and Medical Supplies",
+    "value": "PGK 2.7M",
+    "deadline": "28 Nov 2026",
+    "closing": "28 Nov 2026, 11:00 AM (UTC+10)",
+    "status": "Closing Soon",
+    "summary": "Supply of essential medical equipment and consumables to provincial rural clinics, including installation support and maintenance scheduling.",
+    "requirements": [
+      "Registered medical supply entity",
+      "Proven track record for health sector procurement",
+      "Service and maintenance plan",
+      "Documentation of product quality assurance"
+    ],
+    "documents": [
+      "Product catalogue and specifications",
+      "Delivery schedule",
+      "Supplier quality certification",
+      "Past health sector supply references"
+    ]
+  },
+  {
+    "id": "school-building-renovation",
+    "title": "School Building Renovation and Maintenance",
+    "department": "Department of Education",
+    "location": "Mount Hagen, Western Highlands",
+    "category": "Building and Construction",
+    "value": "PGK 3.6M",
+    "deadline": "22 Nov 2026",
+    "closing": "22 Nov 2026, 4:30 PM (UTC+10)",
+    "status": "Open",
+    "summary": "Renovation and maintenance services for selected educational facilities including classrooms, sanitation systems, and safety upgrades.",
+    "requirements": [
+      "Construction company with civil and building maintenance experience",
+      "Health and safety compliance plan",
+      "Resource mobilization plan for affected school sites",
+      "Project sequencing and QA methodology"
+    ],
+    "documents": [
+      "Company registration and insurance",
+      "Technical method statement",
+      "Project schedule",
+      "Past construction references"
+    ]
+  }
+]

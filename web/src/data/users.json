@@ -1,0 +1,35 @@
+[
+  {
+    "id": "gov_admin_1",
+    "fullName": "Government Admin",
+    "email": "admin@pngcontractconnect.com",
+    "organization": "Department of Works",
+    "phone": "+675 3000 000",
+    "province": "National Capital District",
+    "role": "government",
+    "passwordHash": "34352aff066e6f92b8c1a9df628d4ac4:cf9ebf58cfdf3b2c188a53b6cb3fc4345fb90c300da39b96f0d50db833776683ec3c0cc3d457f44bb87060858a1a91b2c1b883f9c00914c84adb34cde1c7fc27",
+    "createdAt": "2026-10-13T19:38:34.030Z"
+  },
+  {
+    "id": "contractor_1",
+    "fullName": "Tana Build PNG",
+    "email": "contractor@tana.build",
+    "organization": "Tana Build PNG",
+    "phone": "+675 7800 112",
+    "province": "Morobe",
+    "role": "contractor",
+    "passwordHash": "b4feacf1c3606fbc6e5b5c50a8f9e3b0:bc0c6ed99bbeb3a2831cbff9d0181aece34ea881b1df16024a497e379052acf967277aea84966afdf5f3fb88fe936d1bc2287006d6155d7c880aee74163bd2a0",
+    "createdAt": "2026-10-13T19:38:34.145Z"
+  },
+  {
+    "id": "596e79b7-b53d-42ac-b728-c3cdd032e07e",
+    "fullName": "Nathaniel Miamba",
+    "email": "jiparitech@gmail.com",
+    "organization": "Jipari",
+    "phone": "+675 72559844",
+    "province": "National Capital District",
+    "role": "government",
+    "passwordHash": "ae3017cf0a60030614f58f1c230dcc3e:f64f8b2b59e3f9c67c1da9d2deb79e0eadc76159e5ff429a041ec52c6cd2efff19813878da6089bcd5516d857f4e35d2dc75f057ef5a6dd03fbc49cdf8df2948",
+    "createdAt": "2026-10-13T19:48:56.267Z"
+  }
+]

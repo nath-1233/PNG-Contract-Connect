@@ -1,0 +1,20 @@
+[
+  {
+    "id": "a190a415-f562-48c8-9282-90f83bb6b92a",
+    "userId": "contractor_1",
+    "tenderId": "road-maintenance-services",
+    "tenderTitle": "National Road Maintenance Services",
+    "status": "In review",
+    "submittedAt": "2026-10-13T19:38:34.400Z",
+    "organization": "Tana Build PNG"
+  },
+  {
+    "id": "d765009d-a0b9-4788-a2f8-55f5c46221a0",
+    "userId": "contractor_1",
+    "tenderId": "digital-records-platform",
+    "tenderTitle": "Digital Records Management Platform",
+    "status": "Submitted",
+    "submittedAt": "2026-10-12T19:38:34.400Z",
+    "organization": "Tana Build PNG"
+  }
+]
