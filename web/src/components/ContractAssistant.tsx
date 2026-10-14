@@ -176,7 +176,7 @@ export default function ContractAssistant() {
   const actionsDisabled = busy || !sessionId || serviceStatus !== "configured";
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 sm:bottom-7 sm:right-7">
+    <div className="fixed bottom-5 right-5 z-[1000] flex flex-col items-end gap-3 sm:bottom-7 sm:right-7">
       {open ? (
         <section
           id="contract-assistant-panel"
@@ -306,11 +306,15 @@ export default function ContractAssistant() {
       <button
         type="button"
         onClick={toggleAssistant}
+        aria-label={open ? "Close contract assistant" : "Open contract assistant"}
         aria-expanded={open}
         aria-controls="contract-assistant-panel"
-        className="inline-flex items-center gap-2 rounded-full bg-[#d62828] px-5 py-3 font-semibold text-white shadow-lg transition hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0d3b66]"
+        className="inline-flex min-h-14 items-center gap-3 rounded-full border-2 border-white bg-[#d62828] px-6 py-3 font-bold text-white shadow-[0_12px_36px_rgba(13,59,102,0.35)] transition hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0d3b66]"
       >
-        <span aria-hidden="true">?</span>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-6 w-6" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.4-.76L4 20l1.76-4.34A7.46 7.46 0 0 1 5 12.5 7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.5 12h7M8.5 9h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
         {open ? "Close help" : "Contract help"}
       </button>
     </div>
