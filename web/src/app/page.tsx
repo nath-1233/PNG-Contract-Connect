@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Suspense } from "react";
 
 import { getTenders } from "@/lib/data-store";
@@ -165,8 +166,15 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0d3b66] text-lg font-bold text-white shadow-sm">
-              PNG
+            <div className="h-11 w-11 overflow-hidden rounded-xl bg-white shadow-sm">
+              <Image
+                src="/png-digital-bird-emblem.png"
+                alt="Papua New Guinea digital bird emblem"
+                width={44}
+                height={44}
+                className="h-full w-full object-contain"
+                priority
+              />
             </div>
             <div>
               <p className="text-lg font-bold text-slate-900">PNG Contract Connect</p>
@@ -412,8 +420,14 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-4 lg:px-8">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d62828] text-sm font-black text-white">
-                PNG
+              <div className="h-10 w-10 overflow-hidden rounded-xl bg-white">
+                <Image
+                  src="/png-digital-bird-emblem.png"
+                  alt="Papua New Guinea digital bird emblem"
+                  width={40}
+                  height={40}
+                  className="h-full w-full object-contain"
+                />
               </div>
               <div>
                 <p className="font-bold text-white">PNG Contract Connect</p>
