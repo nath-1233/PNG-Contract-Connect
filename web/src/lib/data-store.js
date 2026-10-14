@@ -291,7 +291,7 @@ export async function getApplicationsForUser(userId) {
   return applications.filter((application) => application.userId === userId);
 }
 
-export async function addApplication({ userId, tenderId, tenderTitle, organization, proposal }) {
+export async function addApplication({ userId, tenderId, tenderTitle, organization, proposal, documents }) {
   const applications = await getApplications();
   const newApplication = {
     id: crypto.randomUUID(),
@@ -300,6 +300,7 @@ export async function addApplication({ userId, tenderId, tenderTitle, organizati
     tenderTitle,
     organization,
     proposal,
+    documents,
     status: 'Submitted',
     submittedAt: new Date().toISOString(),
   };
