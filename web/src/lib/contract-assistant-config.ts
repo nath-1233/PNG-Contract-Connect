@@ -22,7 +22,7 @@ async function readSavedKey(): Promise<string> {
     ) {
       throw new Error("Invalid assistant settings file.");
     }
-    return parsed.geminiApiKey;
+    return parsed.geminiApiKey.trim();
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return "";
@@ -36,12 +36,12 @@ export async function getSavedGeminiApiKey(): Promise<string> {
 }
 
 export async function getGeminiApiKey(): Promise<string> {
-  return process.env.GEMINI_API_KEY || await readSavedKey();
+  return process.env.GEMINI_API_KEY?.trim() || await readSavedKey();
 }
 
 export async function getAssistantKeyStatus() {
   const savedKey = await readSavedKey();
-  const geminiManagedByEnvironment = Boolean(process.env.GEMINI_API_KEY);
+  const geminiManagedByEnvironment = Boolean(process.env.GEMINI_API_KEY?.trim());
   return {
     geminiConfigured: geminiManagedByEnvironment || Boolean(savedKey),
     geminiSaved: Boolean(savedKey),

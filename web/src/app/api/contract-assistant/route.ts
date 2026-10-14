@@ -91,6 +91,16 @@ function getGeminiUnavailableModelMessage() {
   return "The configured Gemini model is not available to this API key. Enable gemini-2.5-flash in Google AI Studio or set GEMINI_MODEL to a model available to this key.";
 }
 
+function logGeminiTransportFailure(model: string, error: unknown) {
+  const rawName = error instanceof Error ? error.name : "UnknownError";
+  const name = /^[A-Za-z][A-Za-z0-9]*$/.test(rawName) ? rawName : "UnknownError";
+  const cause = error instanceof Error ? error.cause : undefined;
+  const code = isRecord(cause) && typeof cause.code === "string" && /^[A-Z0-9_]+$/.test(cause.code)
+    ? cause.code
+    : "none";
+  console.error(`[contract-assistant] Gemini transport failure model=${model} name=${name} code=${code}`);
+}
+
 function getGeminiResponseText(value: unknown): string | null {
   if (!isRecord(value)) return null;
   if (typeof value.output_text === "string" && value.output_text.trim()) {
@@ -181,6 +191,12 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  if (!/^[\x21-\x7e]+$/.test(apiKey)) {
+    return Response.json(
+      { error: "The Gemini API key contains characters that cannot be sent safely. Replace it in Government dashboard → API settings or GEMINI_API_KEY." },
+      { status: 503 },
+    );
+  }
 
   const upstreamUrl = "https://generativelanguage.googleapis.com/v1beta/interactions";
   const headers = new Headers({ "Content-Type": "application/json" });
@@ -203,9 +219,10 @@ export async function POST(request: Request) {
   let upstream: Response;
   try {
     upstream = await requestGemini(geminiModel);
-  } catch {
+  } catch (error) {
+    logGeminiTransportFailure(geminiModel, error);
     return Response.json(
-      { error: "Unable to reach Gemini. Check the portal server connection and try again." },
+      { error: "The portal server could not connect to Gemini. Check outbound HTTPS access to generativelanguage.googleapis.com and try again." },
       { status: 502 },
     );
   }
@@ -221,9 +238,10 @@ export async function POST(request: Request) {
     if (geminiModel !== geminiFallbackModel && isTransientGeminiError(upstream, primaryError)) {
       try {
         upstream = await requestGemini(geminiFallbackModel);
-      } catch {
+      } catch (error) {
+        logGeminiTransportFailure(geminiFallbackModel, error);
         return Response.json(
-          { error: "Unable to reach Gemini. Check the portal server connection and try again." },
+          { error: "The portal server could not connect to Gemini. Check outbound HTTPS access to generativelanguage.googleapis.com and try again." },
           { status: 502 },
         );
       }

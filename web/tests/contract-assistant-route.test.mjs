@@ -143,6 +143,21 @@ test('assistant status, validation, missing keys, and provider requests', async 
       assert.match((await readJson(gemini)).error, /Government dashboard/);
     });
 
+    await t.test('rejects invalid header characters in credentials without sending a request', async () => {
+      process.env.GEMINI_API_KEY = 'test\nkey';
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls += 1;
+        return Response.json({ output_text: 'unexpected' });
+      };
+
+      const response = await routeModule.POST(makeChatRequest(messages));
+      assert.equal(response.status, 503);
+      assert.match((await readJson(response)).error, /cannot be sent safely/);
+      assert.equal(calls, 0);
+      delete process.env.GEMINI_API_KEY;
+    });
+
     await t.test('reads saved keys dynamically and gives environment keys precedence without exposing either', async () => {
       await configModule.saveGeminiApiKey({ geminiApiKey: 'saved-gemini-test-key' });
       assert.equal(await configModule.getGeminiApiKey(), 'saved-gemini-test-key');
