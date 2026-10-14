@@ -16,6 +16,12 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Contract assistant configuration
+
+The contract assistant uses the separately deployed ChatbotContractAnalyzer API through the portal's same-origin route handlers. Set `CONTRACT_ASSISTANT_API_URL` in the portal server environment to the analyzer service base URL. Do not prefix it with `NEXT_PUBLIC_` or expose it in browser code. If it is unset, the assistant displays a setup message and its API proxy returns HTTP 503.
+
+The assistant sends PDF uploads to `/upload`, questions to `/chat`, and session clears to `/reset`. Each request includes a browser-session UUID in the `X-Session-ID` header so uploaded documents are isolated by browser session.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
