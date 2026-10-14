@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 
 import { getTenderById } from '@/lib/data-store';
+import ApplyForm from './ApplyForm';
 
 async function TenderDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -105,9 +106,7 @@ async function TenderDetailContent({ params }: { params: Promise<{ id: string }>
               <p className="mt-3 text-sm leading-6 text-sky-100">
                 Complete the application form, upload required documents, and confirm before the deadline.
               </p>
-              <Link href="/register" className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#0d3b66] hover:bg-slate-100">
-                Start application
-              </Link>
+              <ApplyForm tenderId={tender.id} />
             </div>
 
             <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">

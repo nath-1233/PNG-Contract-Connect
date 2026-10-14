@@ -1,4 +1,17 @@
 import Link from "next/link";
+import { Suspense } from "react";
+
+import { getTenders } from "@/lib/data-store";
+
+type PortalTender = {
+  id: string;
+  title: string;
+  department: string;
+  location: string;
+  deadline: string;
+  status: string;
+  value: string;
+};
 
 const stats = [
   { label: "Provinces covered", value: "22" },
@@ -24,33 +37,6 @@ const categories = [
   "Office Supplies and Equipment",
   "Security Services",
   "Environmental Services",
-];
-
-const tenders = [
-  {
-    title: "National Road Maintenance Services",
-    department: "Department of Works",
-    location: "Port Moresby, NCD",
-    deadline: "14 Nov 2026",
-    status: "Open",
-    value: "PGK 8.4M",
-  },
-  {
-    title: "Digital Records Management Platform",
-    department: "Department of Finance",
-    location: "Lae, Morobe",
-    deadline: "03 Dec 2026",
-    status: "Open",
-    value: "PGK 1.9M",
-  },
-  {
-    title: "Rural Health Clinic Supply Contract",
-    department: "Provincial Health Authority",
-    location: "Kokopo, East New Britain",
-    deadline: "28 Nov 2026",
-    status: "Closing Soon",
-    value: "PGK 2.7M",
-  },
 ];
 
 const steps = [
@@ -102,6 +88,76 @@ const securityFeatures = [
   "Private object storage for sensitive documents",
   "Audit logging and secure operational reporting",
 ];
+
+async function LiveTenderSnapshot() {
+  const tenders = (await getTenders()) as PortalTender[];
+  const acceptingBids = tenders.filter((tender) => ["Open", "Closing Soon"].includes(tender.status));
+  const nextDeadline = acceptingBids[0];
+
+  return (
+    <div className="w-full rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-300/40">
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-300">Live portal</p>
+          <h2 className="mt-2 text-2xl font-bold">Tender snapshot</h2>
+        </div>
+        <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-300">Active</span>
+      </div>
+      <div className="space-y-4">
+        {[
+          { label: "Contracts accepting bids", value: String(acceptingBids.length) },
+          { label: "Closing soon", value: String(acceptingBids.filter((tender) => tender.status === "Closing Soon").length) },
+          { label: "Publishing organizations", value: String(new Set(tenders.map((tender) => tender.department)).size) },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3">
+            <span className="text-sm text-slate-300">{item.label}</span>
+            <span className="text-xl font-bold text-white">{item.value}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        {nextDeadline ? (
+          <>
+            <p className="text-sm text-slate-300">Latest contract opportunity</p>
+            <Link href={`/tenders/${nextDeadline.id}`} className="mt-2 block text-lg font-semibold text-white hover:underline">{nextDeadline.title}</Link>
+            <div className="mt-3 flex items-center justify-between text-sm text-slate-300">
+              <span>Closing date</span>
+              <span className="font-medium text-slate-100">{nextDeadline.deadline}</span>
+            </div>
+          </>
+        ) : <p className="text-sm text-slate-300">There are no open contracts at this time.</p>}
+      </div>
+    </div>
+  );
+}
+
+async function LatestOpportunities() {
+  const tenders = (await getTenders()) as PortalTender[];
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {tenders.slice(0, 3).map((tender) => (
+        <article key={tender.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{tender.department}</p>
+              <h3 className="mt-3 text-xl font-bold text-slate-900">{tender.title}</h3>
+            </div>
+            <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-700">{tender.status}</span>
+          </div>
+          <div className="mt-6 space-y-3 text-sm text-slate-600">
+            <p>📍 {tender.location}</p>
+            <p>⏰ Closing: {tender.deadline}</p>
+            <p>💰 Estimated value: {tender.value}</p>
+          </div>
+          <Link href={`/tenders/${tender.id}`} className="mt-6 inline-flex rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-[#0d3b66] hover:text-[#0d3b66]">
+            View details
+          </Link>
+        </article>
+      ))}
+      {!tenders.length ? <p className="text-slate-600">No contracts have been published yet.</p> : null}
+    </div>
+  );
+}
 
 export default function Home() {
   return (
@@ -189,39 +245,9 @@ export default function Home() {
             </div>
 
             <div className="flex items-center justify-center">
-              <div className="w-full rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-300/40">
-                <div className="mb-8 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-slate-300">Live portal</p>
-                    <h2 className="mt-2 text-2xl font-bold">Tender snapshot</h2>
-                  </div>
-                  <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-300">
-                    Active
-                  </span>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    { label: "Open tenders", value: "183" },
-                    { label: "Closing this month", value: "47" },
-                    { label: "Approved departments", value: "29" },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3">
-                      <span className="text-sm text-slate-300">{item.label}</span>
-                      <span className="text-xl font-bold text-white">{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-                  <p className="text-sm text-slate-300">Next deadline</p>
-                  <p className="mt-2 text-lg font-semibold text-white">Rural Infrastructure Upgrade</p>
-                  <div className="mt-3 flex items-center justify-between text-sm text-slate-300">
-                    <span>Closing date</span>
-                    <span className="font-medium text-slate-100">18 Nov 2026</span>
-                  </div>
-                </div>
-              </div>
+              <Suspense fallback={<div className="h-80 w-full animate-pulse rounded-[2rem] bg-slate-900" />}>
+                <LiveTenderSnapshot />
+              </Suspense>
             </div>
           </div>
 
@@ -246,31 +272,9 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            {tenders.map((tender) => (
-              <article key={tender.title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{tender.department}</p>
-                    <h3 className="mt-3 text-xl font-bold text-slate-900">{tender.title}</h3>
-                  </div>
-                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-700">
-                    {tender.status}
-                  </span>
-                </div>
-
-                <div className="mt-6 space-y-3 text-sm text-slate-600">
-                  <p>📍 {tender.location}</p>
-                  <p>⏰ Closing: {tender.deadline}</p>
-                  <p>💰 Estimated value: {tender.value}</p>
-                </div>
-
-                <Link href="/tenders/road-maintenance-services" className="mt-6 inline-flex rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-[#0d3b66] hover:text-[#0d3b66]">
-                  View details
-                </Link>
-              </article>
-            ))}
-          </div>
+          <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl bg-slate-200" />}>
+            <LatestOpportunities />
+          </Suspense>
         </section>
 
         <section className="bg-slate-900 py-16 text-white">

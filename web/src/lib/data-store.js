@@ -257,10 +257,13 @@ export async function getTenderById(id) {
 
 export async function createTender(input) {
   const tenders = await getTenders();
+  const baseId = String(input.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tender';
   const newTender = {
-    id: input.id || `${String(input.title).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    id: input.id || (tenders.some((tender) => tender.id === baseId) ? `${baseId}-${crypto.randomUUID()}` : baseId),
     title: input.title,
     department: input.department,
+    publisherId: input.publisherId,
+    publisherOrganization: input.publisherOrganization,
     location: input.location,
     category: input.category,
     value: input.value,
@@ -288,7 +291,7 @@ export async function getApplicationsForUser(userId) {
   return applications.filter((application) => application.userId === userId);
 }
 
-export async function addApplication({ userId, tenderId, tenderTitle, organization }) {
+export async function addApplication({ userId, tenderId, tenderTitle, organization, proposal }) {
   const applications = await getApplications();
   const newApplication = {
     id: crypto.randomUUID(),
@@ -296,6 +299,7 @@ export async function addApplication({ userId, tenderId, tenderTitle, organizati
     tenderId,
     tenderTitle,
     organization,
+    proposal,
     status: 'Submitted',
     submittedAt: new Date().toISOString(),
   };
