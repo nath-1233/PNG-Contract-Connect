@@ -10,6 +10,7 @@ import {
 import {
   appendAuditEntry,
   getProcurementWorkspace,
+  ProcurementWorkspaceStorageError,
   updateProcurementWorkspace,
   verifyAuditChain,
 } from '@/lib/procurement-workspace';
@@ -81,7 +82,15 @@ export async function GET(
     return Response.json({ error: 'You do not have access to this contract workspace.' }, { status: 403 });
   }
 
-  const workspace = await getProcurementWorkspace(tenderId);
+  let workspace;
+  try {
+    workspace = await getProcurementWorkspace(tenderId);
+  } catch (error) {
+    if (error instanceof ProcurementWorkspaceStorageError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
   const ownApplicationIds = new Set(tenderApplications.map((application) => application.id));
   const visibleApplications = tenderApplications.map((application) => {
     const evaluation = workspace.evaluations.find((item: { applicationId: string }) =>
@@ -360,6 +369,9 @@ export async function POST(
     return Response.json({ success: true, result });
   } catch (error) {
     if (error instanceof WorkspaceActionError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof ProcurementWorkspaceStorageError) {
       return Response.json({ error: error.message }, { status: error.status });
     }
     throw error;

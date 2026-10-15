@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { getSafeInternalRedirectPath } from '@/lib/post-login-redirect';
+
 const defaultForm = {
   fullName: '',
   organization: '',
@@ -51,7 +53,9 @@ export default function RegisterPage() {
       return;
     }
 
-    router.push(data.user.role === 'government' ? '/government-dashboard' : '/contractor-dashboard');
+    const defaultPath = data.user.role === 'government' ? '/government-dashboard' : '/contractor-dashboard';
+    const returnTo = new URLSearchParams(window.location.search).get('returnTo');
+    router.push(getSafeInternalRedirectPath(returnTo, defaultPath));
     router.refresh();
   };
 

@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { getSafeInternalRedirectPath } from '@/lib/post-login-redirect';
+
 export default function LoginPage() {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -30,7 +32,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.push(data.user.role === 'government' ? '/government-dashboard' : '/contractor-dashboard');
+    const defaultPath = data.user.role === 'government' ? '/government-dashboard' : '/contractor-dashboard';
+    const returnTo = new URLSearchParams(window.location.search).get('returnTo');
+    router.push(getSafeInternalRedirectPath(returnTo, defaultPath));
     router.refresh();
   };
 
