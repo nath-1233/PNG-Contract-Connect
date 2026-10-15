@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { appendAuditEntry, verifyAuditChain } from '../src/lib/procurement-workspace.js';
+import {
+  appendAuditEntry,
+  getProcurementWorkspace,
+  ProcurementWorkspaceStorageError,
+  verifyAuditChain,
+} from '../src/lib/procurement-workspace.js';
 
 test('workspace audit entries form a verifiable hash chain', () => {
   const workspace = { auditEntries: [] };
@@ -32,4 +37,23 @@ test('workspace audit chain detects modified records', () => {
   workspace.auditEntries[0].event = 'invoice-paid';
 
   assert.equal(verifyAuditChain(workspace.auditEntries), false);
+});
+
+test('production workspace storage fails clearly when Neon is not configured', async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  process.env.NODE_ENV = 'production';
+
+  try {
+    await assert.rejects(
+      getProcurementWorkspace('road-maintenance-services'),
+      (error) => error instanceof ProcurementWorkspaceStorageError && error.status === 503,
+    );
+  } finally {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = originalDatabaseUrl;
+  }
 });

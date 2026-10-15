@@ -171,7 +171,7 @@ export default function ProcurementWorkspacePage() {
         setSelectedTenderId(ownedTenders[0]?.id || '');
       } catch (loadError) {
         if (loadError instanceof Error && loadError.message === 'Not authenticated.') {
-          router.replace('/login');
+          router.replace('/login?returnTo=%2Fprocurement-workspace');
           return;
         }
         setError(loadError instanceof Error ? loadError.message : 'Unable to load procurement workspace.');
@@ -508,14 +508,14 @@ export default function ProcurementWorkspacePage() {
             </div>
           </div>
           <p className="mt-5 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-            This file-backed MVP audit chain is tamper-evident only for the records currently stored; it is not immutable or independently verified.
+            This MVP audit chain is tamper-evident for stored records; it is not immutable or independently verified.
             External identity verification and automated suspicious-bidding alerts are not connected. Document storage status is reported separately below.
             {integrations ? ` Current integration status: identity ${integrations.identityVerification}, file storage ${integrations.documentStorage}, finance ${integrations.financeAndBanking}, alerts ${integrations.automatedSuspiciousBidAlerts}.` : ''}
           </p>
         </section>
 
         <footer className="mt-8 text-center text-xs text-slate-500">
-          MVP workspace records use the portal’s current file-backed storage. Configure a durable database and private document storage before production procurement use.
+          Production workspace records require the connected Neon Postgres database. Local development without DATABASE_URL uses an ignored file-backed store.
         </footer>
       </div>
     </main>

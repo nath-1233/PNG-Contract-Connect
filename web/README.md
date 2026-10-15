@@ -42,6 +42,10 @@ Provide AWS credentials through the deployment's server-side AWS credential prov
 
 Uploads are limited to five PDF, DOCX, XLSX, JPG, or PNG files of at most 10 MB each. AWS setup and credentials are not included in the local application; without them, upload creation returns a configuration error and does not fall back to local storage.
 
+## Procurement workspace persistence
+
+The evaluation, declarations, milestones, invoices, and audit trail use Neon Postgres when `DATABASE_URL` is set. Add a Neon Postgres database through the Vercel Marketplace and link it to the production project so Vercel provides `DATABASE_URL` to server functions. The workspace table is initialized automatically on its first API request. In production the API fails with a clear configuration error when the database is not connected; it never writes procurement changes to the deployment filesystem. For local development without `DATABASE_URL`, workspace data continues to use the ignored local JSON file.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
